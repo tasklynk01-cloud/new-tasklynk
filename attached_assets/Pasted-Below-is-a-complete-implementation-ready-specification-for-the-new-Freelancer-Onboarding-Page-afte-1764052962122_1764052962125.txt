@@ -1,0 +1,205 @@
+Below is a complete, implementation-ready specification for the new Freelancer Onboarding Page (after registration), including:
+•	Page flow
+•	UI requirements
+•	Backend logic
+•	Database schema changes
+•	Lists of subjects, software, and work types
+•	Validation rules
+•	Admin/manager visibility
+•	Email verification redirection
+You can hand this directly to your developer.
+________________________________________
+✅ FREELANCER ONBOARDING PAGE — FULL TECHNICAL SPECIFICATION
+1. PAGE LOCATION IN THE FLOW
+1.	User registers → chooses “Freelancer” account.
+2.	User completes personal details (name, education, experience, etc.).
+3.	After submitting details → redirect to the new onboarding page: “Freelancer Skills & Competencies”.
+4.	After completing the page → redirect to Email Verification.
+________________________________________
+✅ 2. PAGE STRUCTURE & FUNCTIONALITY
+A. Sections on the Page
+1. Subjects (Mandatory)
+•	Freelancer must choose:
+o	Minimum: 7
+o	Maximum: 15
+•	Multi-select checkbox interface.
+•	Validation:
+o	If less than 7 selected → show error.
+o	If more than 15 selected → show error.
+2. Software / Tools (No limit)
+•	Can select unlimited options.
+•	Add “Other (specify)” textbox.
+3. Services / Type of Work (No limit)
+•	Multi-select list.
+•	Add “Other (specify)” textbox.
+4. Submit Button
+•	Saves the selections to the database.
+•	Redirects user to Email Verification Page.
+________________________________________
+✅ 3. DATABASE SCHEMA ADJUSTMENTS
+A. New Tables Needed
+1. freelancer_subjects
+Stores selectable subjects.
+id (PK)
+name VARCHAR(255)
+status ENUM('active','inactive')
+2. freelancer_software
+id (PK)
+name VARCHAR(255)
+status ENUM('active','inactive')
+3. freelancer_services
+id (PK)
+name VARCHAR(255)
+status ENUM('active','inactive')
+4. Mapping tables to store freelancer selections
+freelancer_subject_map
+id (PK)
+freelancer_id (FK -> users.id)
+subject_id (FK -> freelancer_subjects.id)
+created_at
+freelancer_software_map
+id (PK)
+freelancer_id (FK)
+software_id (FK)
+created_at
+freelancer_services_map
+id (PK)
+freelancer_id (FK)
+service_id (FK)
+created_at
+________________________________________
+✅ 4. CHANGES IN EXISTING TABLES
+users table
+Add field:
+skills_completed BOOLEAN DEFAULT 0
+Manager/admin view
+Add query filters to:
+•	View freelancer skills from:
+o	freelancer_subject_map
+o	freelancer_software_map
+o	freelancer_services_map
+Add UI in dashboard:
+•	Freelancer → Profile → “Skills & Competencies”
+________________________________________
+✅ 5. FRONTEND VALIDATION
+Subjects
+•	Block submission unless selections are between 7 and 15.
+Software / Services
+•	No limit, but require at least 1 selection in services.
+On Successful Submit
+•	Save → redirect to:
+/email-verification?user=ID
+________________________________________
+✅ 6. ADMIN/MANAGER FEATURES
+A. Admin Dashboard:
+•	View freelancer profile → Skills & Competencies tab
+•	Ability to:
+o	Activate/Deactivate any freelancer’s selected subjects
+o	Add new subjects/software/services from the admin panel
+B. Manager Dashboard
+•	Read-only view of freelancer skills.
+________________________________________
+✅ 7. LIST OF SUGGESTED SUBJECTS, SOFTWARE & SERVICES
+A. Subjects (Choose 7–15)
+•	Accounting
+•	Finance
+•	Economics
+•	Statistics
+•	Mathematics
+•	Computer Science
+•	Information Technology
+•	Nursing
+•	Medicine
+•	Public Health
+•	Biology
+•	Chemistry
+•	Physics
+•	Environmental Science
+•	Business Studies
+•	Human Resource Management
+•	Marketing
+•	Project Management
+•	Sociology
+•	Psychology
+•	Philosophy
+•	Education
+•	History
+•	Political Science
+•	Law
+•	Criminology
+•	Engineering (Civil, Electrical, Mechanical, Software)
+•	Architecture
+•	Art & Design
+•	Literature
+•	Communication
+•	Supply Chain & Logistics
+________________________________________
+B. Software / Tools
+•	SPSS
+•	STATA
+•	R
+•	Python
+•	MATLAB
+•	EViews
+•	Excel
+•	PowerPoint
+•	Word
+•	Tableau
+•	PowerBI
+•	AutoCAD
+•	ArcGIS
+•	RevMan
+•	NVIVO
+•	Zotero
+•	EndNote
+•	LaTeX
+•	Adobe Photoshop / Illustrator
+•	Canva
+________________________________________
+C. Types of Services / Work
+•	Essay Writing
+•	Research Papers
+•	Case Studies
+•	Reports
+•	Business Plans
+•	Coursework
+•	Technical Work
+•	Coding Assignments
+•	Data Analysis
+•	Proofreading & Editing
+•	Literature Reviews
+•	Annotated Bibliographies
+•	Capstone Projects
+•	Theses & Dissertations
+•	Presentations
+•	Lab Reports
+•	Marketing Plans
+•	CV/Resume Writing
+•	Personal Statements
+________________________________________
+✅ 8. BACKEND LOGIC SUMMARY
+On Submit
+1.	Validate selections.
+2.	Save entries to mapping tables.
+3.	Update:
+users.skills_completed = 1
+4.	Redirect to email verification page.
+________________________________________
+✅ 9. DEVELOPER CHECKLIST
+Frontend
+•	Add new page UI
+•	Multi-select fields
+•	Validation alerts
+•	Submit button → API call
+Backend
+•	New tables
+•	Create mappings
+•	API endpoint:
+POST /freelancer/skills/save
+•	Update user status
+•	Redirect
+Admin/Manager Dashboard
+•	Read skills
+•	Display mapping table values
+•	Add management controls
+

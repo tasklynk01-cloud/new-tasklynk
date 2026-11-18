@@ -1,0 +1,32 @@
+# Dependencies
+node_modules
+
+# Environment files (will be set in Vercel dashboard)
+.env.local
+.env.development
+
+# Testing
+coverage
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Database files
+*.db
+*.db-journal
+
+# IDE
+.vscode
+.idea
+
+# Documentation
+*.md
+!README.md
+
+# Test scripts
+test-*.js
+audit*.js
+verify-*.js
+create-*.js

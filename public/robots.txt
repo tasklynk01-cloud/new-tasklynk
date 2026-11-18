@@ -1,0 +1,20 @@
+# TaskLynk Academic - Robots.txt
+# Protect API endpoints and admin areas from crawling
+
+User-agent: *
+Disallow: /api/
+Disallow: /admin/
+Disallow: /manager/
+Disallow: /_next/
+Disallow: /*.json$
+Disallow: /*.xml$
+Crawl-delay: 10
+
+# Allow main pages
+Allow: /
+
+# Sitemap
+Sitemap: https://tasklynk.co.ke/sitemap.xml
+
+# Host
+Host: https://tasklynk.co.ke

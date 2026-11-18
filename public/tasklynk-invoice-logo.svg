@@ -1,0 +1,14 @@
+<svg width="400" height="120" viewBox="0 0 400 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Dynamic Arc / Crescent Design -->
+  <path d="M30 60C30 77.673 44.327 92 62 92C79.673 92 94 77.673 94 60C94 42.327 79.673 28 62 28C56 28 50 30 45 34C53.284 42.284 58 54.142 58 67C58 79.858 53.284 91.716 45 100C50 104 56 106 62 106C87.405 106 108 85.405 108 60C108 34.595 87.405 14 62 14C36.595 14 16 34.595 16 60C16 70 19 79 24 87" fill="#5B3A8C" stroke="#5B3A8C" stroke-width="2"/>
+  
+  <!-- Lower Swoosh -->
+  <path d="M20 95C35 102 50 105 65 103C45 101 30 98 20 95Z" fill="#FF7A3D" stroke="#FF7A3D" stroke-width="1.5"/>
+  
+  <!-- Text: Task -->
+  <text x="140" y="75" font-family="system-ui, -apple-system, sans-serif" font-size="48" font-weight="900" fill="#241B3F">Task</text>
+  
+  <!-- Text: Lynk -->
+  <text x="250" y="75" font-family="system-ui, -apple-system, sans-serif" font-size="48" font-weight="900" fill="#FF7A3D">Lynk</text>
+</svg>
+

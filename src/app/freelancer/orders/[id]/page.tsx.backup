@@ -1,0 +1,833 @@
+"use client";
+
+export const dynamic = "force-dynamic";
+
+import { useEffect, useState } from 'react';
+import { useAuth } from '@/lib/auth-context-v2';
+import { useRouter, useParams } from 'next/navigation';
+import { Card, CardContent, CardHeader, CardDescription, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Download, ArrowLeft, Send, AlertCircle, Clock, TrendingDown, MessageSquare, CheckCircle, DollarSign, Calendar, FileCheck, Paperclip, User, Loader2, UploadCloud, FileText as FileTextIcon } from 'lucide-react';
+import { format } from 'date-fns';
+import Link from 'next/link';
+import { toast } from 'sonner';
+import { ConfirmationDialog } from '@/components/confirmation-dialog';
+import { calculateWriterEarningsByCPPLevel } from '@/lib/payment-calculations';
+import { FileUploadSection } from '@/components/file-upload-section';
+import { FreelancerSubmissionPanel } from '@/components/freelancer-submission-panel';
+import { CountdownTimer } from '@/components/countdown-timer';
+
+type Job = {
+  id: number;
+  displayId: string;
+  clientId: number;
+  title: string;
+  instructions: string;
+  workType: string;
+  pages: number | null;
+  slides: number | null;
+  amount: number;
+  deadline: string;
+  freelancerDeadline?: string; // Made optional
+  status: string;
+  assignedFreelancerId: number | null;
+  adminApproved: boolean;
+  createdAt: string;
+  isRealOrder?: boolean;
+  revisionRequested?: boolean;
+  revisionNotes?: string;
+  requiresReports?: boolean;
+};
+
+type Attachment = {
+  id: number;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number;
+  uploadType: string;
+  uploadedBy?: number;
+  createdAt: string;
+  fileType?: string;
+  uploaderRole?: string;
+  uploaderName?: string;
+  uploaderEmail?: string;
+};
+
+type Message = {
+  id: number;
+  senderId: number;
+  message: string;
+  createdAt: string;
+};
+
+export default function FreelancerOrderDetailPage() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+  const params = useParams();
+  const jobId = params.id as string;
+
+  const [job, setJob] = useState<Job | null>(null);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+  const [bidDialogOpen, setBidDialogOpen] = useState(false);
+  const [bidAmount, setBidAmount] = useState('');
+  const [newMessage, setNewMessage] = useState('');
+  const [processing, setProcessing] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [showBidConfirm, setShowBidConfirm] = useState(false);
+  const [hasExistingBid, setHasExistingBid] = useState(false);
+  const [freelancerCompletedJobs, setFreelancerCompletedJobs] = useState<number>(0);
+
+  useEffect(() => {
+    if (!loading) {
+      if (!user || user.role !== 'freelancer') {
+        router.push('/');
+      } else if (!user.approved) {
+        router.push('/freelancer/dashboard');
+      } else {
+        // Set freelancer's completed jobs for CPP calculation
+        setFreelancerCompletedJobs(user.completedJobs || 0);
+        fetchOrderDetails();
+      }
+    }
+  }, [user, loading, router, jobId]);
+
+  // Update time every second for countdown
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const fetchOrderDetails = async () => {
+    try {
+      setLoadingData(true);
+      const timestamp = Date.now();
+      const token = localStorage.getItem('bearer_token');
+
+      // Fetch job details using v2 endpoint
+      const jobResponse = await fetch(`/api/v2/orders/${jobId}?_=${timestamp}`, {
+        next: { revalidate: 10 },
+        credentials: 'include',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        }
+      });
+      
+      if (jobResponse.ok) {
+        const response = await jobResponse.json();
+        const jobData = response.order || response;
+        
+        // Allow freelancer to view any order that the backend authorized
+        // Backend already checks if freelancer can view (assigned to them, unassigned, or has a bid)
+        if (jobData) {
+          // 🔴 CRITICAL: Redirect if order is already assigned and in progress
+          // These should be viewed in /freelancer/jobs/[id]
+          const workStatuses = ['assigned', 'in_progress', 'editing', 'delivered', 'internal_revision', 'client_revision', 'approved', 'completed'];
+          if (workStatuses.includes(jobData.status)) {
+            console.log(`[Freelancer Orders Detail] Order ${jobId} status is ${jobData.status}, redirecting to jobs page`);
+            router.push(`/freelancer/jobs/${jobId}`);
+            return;
+          }
+          
+          setJob(jobData);
+          
+          // Only show bid option for accepted (available) orders
+          if (jobData.status === 'accepted' && !jobData.assignedFreelancerId) {
+            // Do not prefill bid to any maximum; show empty by default
+            setBidAmount('');
+            // Check if freelancer already placed a bid for this order
+            if (user?.id) {
+              try {
+                const existingBidRes = await fetch(`/api/bids?freelancerId=${user.id}&jobId=${jobId}`, {
+                  credentials: 'include',
+                });
+                if (existingBidRes.ok) {
+                  const bids = await existingBidRes.json();
+                  setHasExistingBid(Array.isArray(bids) && bids.length > 0);
+                }
+              } catch (err) {
+                console.warn('[Freelancer Orders Detail] Failed to check existing bids:', err);
+              }
+            }
+          }
+        } else {
+          console.error('[Freelancer Orders Detail] Order data missing from response');
+          toast.error('Order not found');
+          router.push('/freelancer/orders');
+          return;
+        }
+      } else {
+        const errorData = await jobResponse.json().catch(() => ({ error: 'Order not found or access denied' }));
+        console.error('[Freelancer Orders Detail] API error:', errorData);
+        
+        // If order not found, try to determine if it exists but is assigned/in-progress
+        if (jobResponse.status === 404 || jobResponse.status === 403) {
+          // Order might be in /freelancer/jobs/[id] if already assigned
+          console.log(`[Freelancer Orders Detail] Order ${jobId} not accessible, checking if it's an assigned order`);
+          
+          // Try fetching from jobs endpoint for assigned orders
+          const assignedCheck = await fetch(`/api/v2/orders/${jobId}`, {
+            credentials: 'include',
+            headers: {
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            }
+          });
+          
+          if (assignedCheck.ok) {
+            const assignedData = await assignedCheck.json();
+            const assignedOrder = assignedData.order || assignedData;
+            
+            // If order is assigned to this freelancer, redirect to work page
+            if (assignedOrder.assignedFreelancerId === user?.id) {
+              console.log(`[Freelancer Orders Detail] Order ${jobId} is assigned, redirecting to work page`);
+              router.push(`/freelancer/jobs/${jobId}`);
+              return;
+            }
+          }
+        }
+        
+        toast.error(errorData.error || 'Failed to load order');
+        router.push('/freelancer/orders');
+        return;
+      }
+
+      // Fetch attachments
+      const attachmentResponse = await fetch(`/api/jobs/${jobId}/attachments?_=${timestamp}`, {
+        cache: 'no-store',
+        credentials: 'include',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        }
+      });
+      if (attachmentResponse.ok) {
+        const data = await attachmentResponse.json();
+        setAttachments(data);
+      }
+
+      // Fetch messages
+      fetchMessages();
+    } catch (error) {
+      console.error('Failed to fetch order details:', error);
+      toast.error('Failed to load order details');
+      router.push('/freelancer/orders');
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  const fetchMessages = async () => {
+    try {
+      const timestamp = Date.now();
+      const token = localStorage.getItem('bearer_token');
+      const response = await fetch(`/api/jobs/${jobId}/messages?userRole=freelancer&_=${timestamp}`, {
+        cache: 'no-store',
+        credentials: 'include',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMessages(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch messages:', error);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim()) return;
+    
+    setProcessing(true);
+    try {
+      const token = localStorage.getItem('bearer_token');
+      const response = await fetch(`/api/jobs/${jobId}/messages`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          senderId: user?.id,
+          message: newMessage,
+        }),
+      });
+
+      if (response.ok) {
+        setNewMessage('');
+        toast.success('Message sent! Waiting for admin approval before delivery.');
+        fetchMessages();
+      } else {
+        const data = await response.json();
+        toast.error(data.error || 'Failed to send message');
+      }
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      toast.error('Failed to send message');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handlePlaceBidClick = () => {
+    if (!job || !bidAmount) {
+      toast.error('Please enter a bid amount');
+      return;
+    }
+    
+    const bidAmountNum = parseFloat(bidAmount);
+
+    // Validate bid amount
+    if (isNaN(bidAmountNum) || bidAmountNum <= 0) {
+      toast.error('Please enter a valid bid amount');
+      return;
+    }
+
+    // Show confirmation
+    setShowBidConfirm(true);
+  };
+
+  const handlePlaceBid = async () => {
+    if (!job) return;
+    
+    setShowBidConfirm(false);
+    setProcessing(true);
+
+    try {
+      const bidAmountNum = parseFloat(bidAmount);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('bearer_token') : null;
+      const response = await fetch('/api/bids', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          jobId: job.id,
+          freelancerId: user?.id,
+          bidAmount: bidAmountNum,
+          message: '', // Message is optional now
+        }),
+      });
+
+      if (response.ok) {
+        setBidDialogOpen(false);
+        toast.success('Bid placed successfully! The admin will review and assign the job.');
+        router.push('/freelancer/orders');
+      } else if (response.status === 409) {
+        // Duplicate bid
+        toast.info("You've already placed a bid for this job");
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast.error(data.error || 'Failed to place bid');
+      }
+    } catch (error) {
+      console.error('Failed to place bid:', error);
+      toast.error('Failed to place bid. Please try again.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleDownloadFile = (attachment: Attachment) => {
+    toast.info(`Downloading ${attachment.fileName}...`);
+    window.open(attachment.fileUrl, '_blank');
+  };
+
+  // Calculate remaining time from freelancer deadline or regular deadline
+  const getCountdownTime = () => {
+    if (!job) return { text: '-', expired: false };
+    const deadlineToUse = job.freelancerDeadline || job.deadline;
+    const due = new Date(deadlineToUse);
+    const diffMs = due.getTime() - currentTime.getTime();
+    if (diffMs <= 0) {
+      return { text: 'Expired', expired: true };
+    }
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    const diffSecs = Math.floor((diffMs % (1000 * 60)) / 1000);
+    if (diffDays > 0) {
+      return { text: `${diffDays}d ${diffHours}h ${diffMins}m ${diffSecs}s`, expired: false };
+    }
+    if (diffHours > 0) {
+      return { text: `${diffHours}h ${diffMins}m ${diffSecs}s`, expired: false };
+    }
+    return { text: `${diffMins}m ${diffSecs}s`, expired: false };
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  if (loading || loadingData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!job) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Order Not Found</h2>
+          <p className="text-muted-foreground mb-4">The order you're looking for doesn't exist or you don't have access to it.</p>
+          <Button onClick={() => router.push('/freelancer/orders')}>
+            Back to Orders
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const countdown = getCountdownTime();
+  const freelancerEarnings = job ? calculateWriterEarningsByCPPLevel(job.pages, job.slides, job.workType, freelancerCompletedJobs) : 0;
+  const deadlineToDisplay = job?.freelancerDeadline || job?.deadline;
+
+  return (
+    <>
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Back Button */}
+        <Link href="/freelancer/orders">
+          <Button variant="ghost" size="sm" className="mb-6 hover:bg-gray-100 dark:hover:bg-gray-800">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Available Orders
+          </Button>
+        </Link>
+
+        {/* Header Section - Clean & Simple */}
+        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-6 mb-6">
+          <div className="space-y-3 mb-4">
+            <div className="flex items-start justify-between gap-4">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{job?.title}</h1>
+              <Badge className={`whitespace-nowrap ${
+                job?.status === 'accepted' ? 'bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-100' :
+                job?.status === 'assigned' ? 'bg-purple-100 text-purple-800 border-purple-300 hover:bg-purple-100' :
+                job?.status === 'pending' ? 'bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-100' :
+                'bg-yellow-100 text-yellow-800 border-yellow-300 hover:bg-yellow-100'
+              }`}>
+                {job?.status === 'accepted' ? 'Available' : 
+                 job?.status === 'assigned' ? 'Assigned' :
+                 job?.status === 'pending' ? 'Pending Approval' :
+                 job?.status.replace('_', ' ').replace('-', ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+              </Badge>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{job?.instructions?.slice(0, 200)}...</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-6 text-sm border-t border-gray-200 dark:border-gray-700 pt-4">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-gray-500" />
+                <span className="text-gray-600 dark:text-gray-400">Deadline:</span>
+                <span className="font-medium text-gray-900 dark:text-white">
+                  {deadlineToDisplay ? format(new Date(deadlineToDisplay), 'MMM dd, yyyy, hh:mm a') : '-'}
+                </span>
+                <span className="text-xs text-red-600 font-medium">({countdown.text})</span>
+              </div>
+              <span className="text-gray-300">|</span>
+              <div className="flex items-center gap-2">
+                <FileTextIcon className="w-4 h-4 text-gray-500" />
+                <span className="text-gray-600 dark:text-gray-400">Word Count:</span>
+                <span className="font-medium text-gray-900 dark:text-white">
+                  {job?.pages ? `${job.pages * 275} words` : '0 words'}
+                </span>
+              </div>
+              <span className="text-gray-300">|</span>
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-gray-500" />
+                <span className="text-gray-600 dark:text-gray-400">Budget:</span>
+                <span className="font-bold text-green-600">KSh {freelancerEarnings.toFixed(2)}</span>
+              </div>
+              <span className="text-gray-300">|</span>
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 text-gray-500" />
+                <span className="text-gray-600 dark:text-gray-400">Manager:</span>
+                <span className="font-medium text-gray-900 dark:text-white">Sarah Johnson</span>
+                <span className="text-xs text-gray-500">assigned to</span>
+              </div>
+            {!hasExistingBid && job?.status === 'accepted' && !countdown.expired && (
+              <Button 
+                onClick={() => setBidDialogOpen(true)}
+                className="ml-auto"
+                size="sm"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Place Bid
+              </Button>
+            )}
+            {hasExistingBid && (
+              <div className="ml-auto flex items-center gap-2 text-blue-600">
+                <CheckCircle className="w-4 h-4" />
+                <span className="text-sm font-medium">Bid Submitted</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Main Layout - Two Columns */}
+        <div className="grid lg:grid-cols-3 gap-6">
+            {/* Left Column - Main Content */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Project Requirements */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base font-semibold">Project Requirements</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                  <li className="flex items-start gap-2">
+                    <span className="text-gray-400 mt-0.5">•</span>
+                    <span><strong>{job?.workType || 'APA'}</strong> citation style</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-gray-400 mt-0.5">•</span>
+                    <span>Minimum {job?.pages || 15} page-reviewed sources</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-gray-400 mt-0.5">•</span>
+                    <span>Include data visualization charts</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-gray-400 mt-0.5">•</span>
+                    <span>Executive summary required</span>
+                  </li>
+                </ul>
+              </CardContent>
+            </Card>
+
+            {/* Subject & Academic Level side by side */}
+            <div className="grid grid-cols-2 gap-4">
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Subject:</p>
+                    <p className="font-medium text-gray-900 dark:text-white">{job?.workType || 'Environmental Science'}</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Academic Level:</p>
+                    <p className="font-medium text-gray-900 dark:text-white">Graduate</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>            {/* Revision Alert */}
+            {job?.revisionRequested && job?.revisionNotes && (
+              <Alert variant="destructive" className="border-red-300">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Revision Required:</strong> {job.revisionNotes}
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+
+          {/* Right Column - Messages & Files */}
+          <div className="lg:col-span-1 space-y-6">
+            {/* Messages Section */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4" />
+                  Messages
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="flex flex-col h-[350px]">
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {messages.length === 0 ? (
+                      <div className="text-center py-12">
+                        <MessageSquare className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                        <p className="text-sm text-gray-500">No messages yet</p>
+                        <p className="text-xs text-gray-400 mt-1">Start a conversation about this project</p>
+                      </div>
+                    ) : (
+                      messages.map((msg) => {
+                        const isSent = msg.senderId === user?.id;
+                        return (
+                          <div key={msg.id} className={`flex ${isSent ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`max-w-[80%] ${isSent ? 'text-right' : 'text-left'}`}>
+                              <div className={`inline-block px-3 py-2 rounded-lg ${
+                                isSent 
+                                  ? 'bg-blue-600 text-white' 
+                                  : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
+                              }`}>
+                                <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {format(new Date(msg.createdAt), 'MMM dd, HH:mm')}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  <div className="p-4 border-t">
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Type your message..."
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendMessage();
+                          }
+                        }}
+                      />
+                      <Button 
+                        size="icon" 
+                        onClick={handleSendMessage} 
+                        disabled={processing || !newMessage.trim()}
+                      >
+                        {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Project Files Section */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-semibold">Project Files</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                {/* Client Uploads */}
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold mb-3">Client Uploads</h3>
+                  {attachments.filter(att => att.uploaderRole !== 'freelancer').length > 0 ? (
+                    <div className="space-y-2">
+                      {attachments.filter(att => att.uploaderRole !== 'freelancer').map((att) => (
+                        <div key={att.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <FileTextIcon className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium truncate">{att.fileName}</p>
+                              <p className="text-xs text-gray-500">{formatFileSize(att.fileSize)}</p>
+                            </div>
+                          </div>
+                          <Button 
+                            size="icon" 
+                            variant="ghost"
+                            onClick={() => handleDownloadFile(att)}
+                          >
+                            <Download className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center py-4">No files uploaded yet</p>
+                  )}
+                </div>
+
+                {/* Your Uploads */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-3">Your Uploads</h3>
+                  {user && job.assignedFreelancerId === user.id ? (
+                    <>
+                      {/* Always show uploaded files if they exist */}
+                      {attachments.filter(att => att.uploaderRole === 'freelancer').length > 0 && (
+                        <div className="space-y-2 mb-4">
+                          {attachments.filter(att => att.uploaderRole === 'freelancer').map((att) => (
+                            <div key={att.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border">
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <FileTextIcon className="w-4 h-4 text-green-600 flex-shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium truncate">{att.fileName}</p>
+                                  <p className="text-xs text-gray-500">{formatFileSize(att.fileSize)}</p>
+                                </div>
+                              </div>
+                              <Button 
+                                size="icon" 
+                                variant="ghost"
+                                onClick={() => handleDownloadFile(att)}
+                              >
+                                <Download className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* Upload panel - only active for in_progress, editing, revision statuses */}
+                      {['in_progress', 'in-progress', 'editing', 'revision'].includes(job.status) ? (
+                        <FreelancerSubmissionPanel
+                          jobId={job.id}
+                          jobStatus={job.status}
+                          assignedFreelancerId={job.assignedFreelancerId}
+                          currentUserId={user.id}
+                          requiresReports={job.requiresReports}
+                          revisionRequested={job.revisionRequested}
+                          onUploadComplete={fetchOrderDetails}
+                        />
+                      ) : (
+                        <div className="text-center py-6 bg-gray-50 dark:bg-gray-800 rounded-lg border border-dashed">
+                          <UploadCloud className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                          <p className="text-sm text-gray-500">
+                            {['delivered', 'approved', 'completed', 'paid'].includes(job.status)
+                              ? 'Work submitted - awaiting review'
+                              : 'Upload buttons become active when order is in progress'}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-6 bg-gray-50 dark:bg-gray-800 rounded-lg border border-dashed">
+                      <UploadCloud className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">Not assigned to this order</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          </div>
+      </div>
+
+      {/* Bid Dialog - Modern & Professional */}
+      <Dialog open={bidDialogOpen} onOpenChange={setBidDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-3 bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900 dark:to-purple-900 rounded-xl">
+                <Send className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <DialogTitle className="text-2xl">Place Your Bid</DialogTitle>
+                <DialogDescription className="text-sm">
+                  Competitive pricing increases your winning chances
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            {/* Order Summary Card */}
+            <div className="bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-blue-950/30 dark:via-purple-950/30 dark:to-pink-950/30 rounded-xl p-5 border border-blue-100 dark:border-blue-900 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <p className="text-xs font-medium text-muted-foreground mb-1">Order Title</p>
+                  <p className="font-semibold text-gray-900 dark:text-white">{job?.title}</p>
+                </div>
+                {job?.displayId && (
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {job.displayId}
+                  </Badge>
+                )}
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4 pt-3 border-t border-blue-200 dark:border-blue-800">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Base Earnings</p>
+                  <p className="text-lg font-bold text-green-600">KSh {freelancerEarnings.toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Deadline</p>
+                  <p className="text-sm font-medium">{deadlineToDisplay ? format(new Date(deadlineToDisplay), 'MMM dd, HH:mm') : '-'}</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Bid Input */}
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="bidAmount" className="text-sm font-semibold mb-2 block">
+                  Your Bid Amount (KSh)
+                </Label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="bidAmount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder={`e.g., ${freelancerEarnings.toFixed(2)}`}
+                    value={bidAmount}
+                    onChange={(e) => setBidAmount(e.target.value)}
+                    className="pl-10 h-12 text-lg font-semibold border-2 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+              
+              {/* Bidding Tips */}
+              <div className="bg-blue-50 dark:bg-blue-950/50 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+                <p className="text-xs font-semibold text-blue-900 dark:text-blue-100 mb-2">💡 Bidding Tips</p>
+                <ul className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
+                  <li>• Competitive bids are more likely to win</li>
+                  <li>• Consider your CPP level and order complexity</li>
+                  <li>• Lower bids increase assignment probability</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter className="gap-2 mt-6">
+            <Button 
+              variant="outline" 
+              onClick={() => setBidDialogOpen(false)}
+              size="lg"
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handlePlaceBidClick} 
+              disabled={processing || !bidAmount || parseFloat(bidAmount) <= 0}
+              size="lg"
+              className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2" />
+                  Submit Bid
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bid Confirmation Dialog */}
+      <ConfirmationDialog
+        open={showBidConfirm}
+        onOpenChange={setShowBidConfirm}
+        title="Place This Bid?"
+        description={`Are you sure you want to place a bid of KSh ${parseFloat(bidAmount || '0').toFixed(2)} for this order? Once submitted, you'll be competing with other freelancers for assignment.`}
+        confirmText="Yes, Place Bid"
+        cancelText="Cancel"
+        onConfirm={handlePlaceBid}
+      />
+    </>
+  );
+}

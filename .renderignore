@@ -1,0 +1,79 @@
+# Render Ignore File
+# Files and directories to exclude from Render deployment
+
+# Documentation (not needed in production)
+*.md
+!README.md
+docs/
+
+# Development files
+.vscode/
+.idea/
+*.log
+*.logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+__tests__/
+test/
+tests/
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+coverage/
+.nyc_output/
+jest.config.js
+jest.setup.js
+
+# Scripts (not needed in production)
+scripts/
+*.sh
+*.bat
+*.ps1
+
+# Backup/deprecated files
+*.bak
+backup-*/
+.snapshots/
+
+# Local environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.pesapal
+
+# Git
+.git/
+.gitattributes
+
+# Editor/IDE
+.devcontainer/
+.idx/
+.local/
+
+# Temporary files
+tmp/
+.next/
+node_modules/
+
+# Build artifacts that get regenerated
+drizzle/
+migrations/
+
+# Debug/audit files
+*-debug.log
+audit-*.txt
+build-*.log
+dev-server.log
+firebase-debug.log
+
+# Old deployment configs
+vercel.json.bak
+wrangler.toml.bak
+netlify.toml
+.vercelignore
+.cfignore

@@ -1,0 +1,290 @@
+Summary of the feature
+•	Client chooses a CPP when creating an order. The UI does not show the minimum until the client types a value; after typing the UI shows validation if it’s less than allowed minimum.
+•	The server enforces a minimum CPP (configurable) and will reject orders with CPP lower than the minimum.
+•	After admin/manager accepts the job, they may request an additional amount (e.g., complexity fee). That becomes a pending addition that the client must approve and pay.
+•	Client may optionally top-up or add a bonus after admin acceptance (top-up appears as optional UI element after acceptance).
+•	Total order amount = (CPP × pages/slides) + requested_additional + client_bonus + other_fees (e.g., platform fee if any).
+•	Only when payment status is confirmed does balances/invoices get updated and manager/freelancer payouts computed.
+•	All changes propagate into invoices and are included in reports and balances.
+________________________________________
+1) Database changes (migrations)
+Goal: Add fields to orders (or jobs) table to store client-set CPP, min thresholds, manager/additional requests, bonuses/topups, and computed totals. Also add a table to track topup requests/history.
+NOTE: adapt names to your existing schema (I use orders as canonical). If you use Drizzle, below SQL can be translated into Drizzle migrations.
+Migration SQL (Postgres-compatible)
+-- 1) Add columns to orders table
+ALTER TABLE public.orders
+  ADD COLUMN client_cpp numeric(10,2) DEFAULT NULL,         -- price per page set by client
+  ADD COLUMN client_is_cpp_confirmed boolean DEFAULT FALSE, -- whether the cpp was confirmed (for audit)
+  ADD COLUMN pages_count integer DEFAULT 1,                 -- number of pages/slides/problems
+  ADD COLUMN is_single_spaced boolean DEFAULT FALSE,        -- optional to double CPP behavior
+  ADD COLUMN manager_additional numeric(10,2) DEFAULT 0,    -- amount manager/admin requested
+  ADD COLUMN manager_additional_note text DEFAULT NULL,     -- reason/explanation
+  ADD COLUMN client_bonus numeric(10,2) DEFAULT 0,         -- optional bonus/tip from client
+  ADD COLUMN status_total_amount numeric(12,2) DEFAULT 0,  -- cached total amount snapshot
+  ADD COLUMN payment_status varchar(32) DEFAULT 'unpaid',   -- unpaid, pending, paid, refunded
+  ADD COLUMN last_amount_update_at timestamptz DEFAULT now();
+
+-- 2) Table to track topup/adjustment history (audit)
+CREATE TABLE IF NOT EXISTS public.order_amount_adjustments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
+  changed_by uuid NULL REFERENCES auth.users(id),
+  change_type text NOT NULL,    -- 'manager_request' | 'client_topup' | 'admin_override'
+  amount numeric(10,2) NOT NULL,
+  reason text,
+  status text DEFAULT 'pending', -- 'pending', 'approved', 'rejected', 'applied'
+  created_at timestamptz DEFAULT now(),
+  applied_at timestamptz
+);
+
+-- 3) Optional: store minimum thresholds centrally
+CREATE TABLE IF NOT EXISTS public.pricing_minimums (
+  id serial PRIMARY KEY,
+  service_type text NOT NULL,  -- 'writing_page', 'slide', 'technical_page', etc.
+  min_cpp numeric(10,2) NOT NULL,
+  effective_from timestamptz DEFAULT now(),
+  effective_to timestamptz
+);
+
+-- Insert defaults (adjust numbers to your new policy)
+INSERT INTO public.pricing_minimums (service_type, min_cpp)
+VALUES
+  ('writing_page', 240.00),
+  ('slide', 150.00),
+  ('writer_default', 200.00),
+  ('technical_page', 270.00)
+ON CONFLICT DO NOTHING;
+If your DB is Turso (SQLite-based) or Drizzle/SQLite, convert types (numeric → REAL, timestamptz → DATETIME) and use AUTOINCREMENT/TEXT for uuids or use uuid() method as available.
+________________________________________
+2) Backend: business rules & enforcement
+Add server-side enforcement on order creation/update endpoints. Never trust client-side validation.
+Environment vars (in .env)
+MIN_CPP_WRITING=240
+MIN_CPP_SLIDE=150
+MIN_CPP_TECHNICAL=270
+DEFAULT_WRITER_CPP=200
+DEFAULT_SLIDE_CPP=100
+MANAGER_ASSIGN_FEE=10
+MANAGER_SUBMIT_BASE=10
+MANAGER_SUBMIT_PER_EXTRA_PAGE=5
+Create order (pseudo-code - Express/Node)
+// POST /api/orders
+async function createOrder(req, res) {
+  const {
+    client_id,
+    title,
+    pages_count = 1,
+    service_type, // 'writing_page' | 'slide' | 'technical_page' etc
+    client_cpp // optional if client sets
+  } = req.body;
+
+  // Determine minimum
+  const minMap = {
+    'writing_page': Number(process.env.MIN_CPP_WRITING || 240),
+    'slide': Number(process.env.MIN_CPP_SLIDE || 150),
+    'technical_page': Number(process.env.MIN_CPP_TECHNICAL || 270),
+  };
+  const min_cpp = minMap[service_type] ?? Number(process.env.MIN_CPP_WRITING);
+
+  // If client supplied CPP, ensure it's numeric
+  const cpp = client_cpp !== undefined ? Number(client_cpp) : null;
+
+  // If client provided cpp but less than min -> reject
+  if (cpp !== null && cpp < min_cpp) {
+    return res.status(400).json({ error: `CPP is less than minimum of ${min_cpp}` });
+  }
+
+  // If cpp is null, set some default (platform chooses or prompts client later)
+  const resolved_cpp = cpp ?? Number(process.env.DEFAULT_WRITER_CPP || 200);
+
+  // compute base total and optionally double for single-spaced (client selects later)
+  let total = resolved_cpp * pages_count;
+
+  // persist
+  const newOrder = await db.query(
+    `INSERT INTO orders (client_id, title, pages_count, client_cpp, status_total_amount, last_amount_update_at)
+     VALUES ($1,$2,$3,$4,$5,now()) RETURNING *`,
+    [client_id, title, pages_count, resolved_cpp, total]
+  );
+
+  res.json({ order: newOrder.rows[0] });
+}
+Admin/Manager requests additional amount
+•	Endpoint: POST /api/orders/:id/request-additional
+•	Body: { amount: number, note: string }
+•	Behavior: create a record in order_amount_adjustments with change_type='manager_request', set status 'pending' → notify client.
+•	Client must approve: POST /api/orders/:id/approve-adjustment → updates adjustment status to approved, updates orders.manager_additional and recomputes status_total_amount.
+Client adds top-up / bonus
+•	Endpoint: POST /api/orders/:id/topup with { amount, note }
+•	Create order_amount_adjustments with change_type='client_topup', status 'approved' (since client initiated) and immediately add to orders.client_bonus and recompute totals.
+Recompute total function (atomic)
+Always run one transaction when applying updates:
+BEGIN;
+UPDATE orders SET
+  manager_additional = COALESCE(manager_additional,0) + $1,
+  client_bonus = COALESCE(client_bonus,0) + $2,
+  status_total_amount = (client_cpp * pages_count) + manager_additional + client_bonus
+WHERE id = $3;
+INSERT INTO order_amount_adjustments (...)
+COMMIT;
+Payment confirmation & balances
+•	When payment_status becomes paid:
+o	Create payments record with provider details (Mpesa).
+o	Update invoices and balances:
+	Freelancer balance increase = amount due to freelancer (compute after company cut).
+	Manager balance increase = fixed assigned fees + submit fees per policy.
+o	Use a DB transaction to update payments, invoices, balances together to avoid race conditions.
+________________________________________
+3) Frontend UI behavior & validation
+Key UX rules:
+•	On the order creation form, show CPP input but do not display minimum until user starts typing.
+•	If typed value < minimum (fetched from server via GET /api/pricing/minimums?service=...) show inline validation and disable submit.
+•	After order is accepted by admin/manager, show admin-requested additions and optional "Add Bonus/Top-up" button for client.
+React validation snippet (simplified)
+function OrderForm({ serviceType }) {
+  const [cpp, setCpp] = useState('');
+  const [min, setMin] = useState(null);
+  const [touched, setTouched] = useState(false);
+
+  useEffect(() => {
+    // fetch min from server once (or fetch on blur)
+    fetch(`/api/pricing/minimums?service=${serviceType}`).then(r=>r.json()).then(d=>setMin(d.min_cpp));
+  }, [serviceType]);
+
+  const showMinValidation = touched && min !== null;
+
+  const isValid = !showMinValidation || (Number(cpp) >= Number(min));
+
+  return (
+    <form onSubmit={...}>
+      <label>CPP (KSh)</label>
+      <input
+        value={cpp}
+        onChange={(e) => { setCpp(e.target.value); setTouched(true); }}
+        type="number" step="0.01" min="0"
+      />
+      { showMinValidation && Number(cpp) < Number(min) && (
+        <div className="text-red-600">CPP must be at least KSh {min}</div>
+      ) }
+      <button disabled={!isValid}>Place Order</button>
+    </form>
+  );
+}
+After admin acceptance UI:
+•	Show manager-requested additional item as a pending item: Manager requested KSh X — Approve / Reject.
+•	Show "Add Bonus" button; on click open small modal to enter bonus amount and note.
+________________________________________
+4) Invoices & balances recalculation
+Rules:
+•	order_total = (client_cpp × pages_count * (single_spaced ? 2 : 1)) + manager_additional + client_bonus
+•	When payment confirmed:
+o	freelancer_amount = order_total × freelancer_share OR per your updated rule (you removed 70% spec earlier — use company policy).
+o	manager_amount = manager_assign_fee + manager_submit_base + manager_submit_per_extra_page × (pages_count - 1) (per your example).
+o	company_revenue = order_total - freelancer_amount - manager_amount - taxes/fees.
+•	All computations should be performed in a transaction and a single place (service layer) to avoid duplication. Store computed snapshots to invoices table for accounting.
+Add or update invoices table to include breakdowns:
+ALTER TABLE invoices ADD COLUMN freelancer_amount numeric(12,2) DEFAULT 0;
+ALTER TABLE invoices ADD COLUMN manager_amount numeric(12,2) DEFAULT 0;
+ALTER TABLE invoices ADD COLUMN company_fee numeric(12,2) DEFAULT 0;
+________________________________________
+5) API endpoints to add/update
+Minimum endpoints to implement/update:
+•	POST /api/orders — create order (enforce min_cpp)
+•	PATCH /api/orders/:id — update (clients can update only while pending/rejected)
+•	POST /api/orders/:id/request-additional — manager/admin requests extra
+•	POST /api/orders/:id/approve-adjustment — client approves manager request
+•	POST /api/orders/:id/topup — client top-up / bonus (approved by default)
+•	POST /api/payments/confirm — webhooks from Mpesa, mark payment_status=paid, run payouts/invoices
+•	GET /api/pricing/minimums?service=writing_page — gives min_cpp for front-end validation
+________________________________________
+6) Tests & QA checklist
+Unit / Integration tests
+•	Create an order with client_cpp lower than MIN_CPP → expect 400.
+•	Create order with no cpp → server chooses default cpp.
+•	Manager requests additional KSh 500 → record created in order_amount_adjustments with change_type='manager_request' and status='pending'.
+•	Client approves manager request → manager_additional added to orders and status_total_amount recalculated.
+•	Client top-up (KSh 100) after acceptance → appears in client_bonus and total updated.
+•	Payment confirmed → payment_status set to paid, invoice entry created, balances updated, manager & freelancer balance entries created.
+Manual tests
+•	UI: enter CPP smaller than min -> validation message appears after typing and prevents submit.
+•	After acceptance: click manager request approve -> amount added, invoice reflects.
+•	Try race condition: simultaneously confirm payment and apply adjustment -> ensure DB transaction prevents inconsistency.
+________________________________________
+7) Drizzle / Turso notes
+•	If you use Drizzle ORM, define the new fields in your schema.ts and run the Drizzle migration generator. Example Drizzle column types:
+export const orders = pgTable('orders', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  client_cpp: numeric('client_cpp', { precision: 10, scale: 2 }).default(null),
+  pages_count: int('pages_count').default(1),
+  manager_additional: numeric('manager_additional', { precision: 10, scale: 2 }).default(0),
+  client_bonus: numeric('client_bonus', { precision: 10, scale: 2 }).default(0),
+  status_total_amount: numeric('status_total_amount', { precision: 12, scale: 2 }).default(0),
+  payment_status: text('payment_status').default('unpaid'),
+  // ...
+});
+•	For Turso (SQLite-like), adjust type mapping: use REAL instead of numeric, TEXT for status, INTEGER for counts.
+________________________________________
+8) Deployment & env updates
+•	Update environment variables on your hosting (Vercel/Render/Supabase/Turso):
+o	MIN_CPP_WRITING, MIN_CPP_SLIDE, MIN_CPP_TECHNICAL, MANAGER_ASSIGN_FEE, MANAGER_SUBMIT_BASE, MANAGER_SUBMIT_PER_EXTRA_PAGE
+•	Add DB migration to production DB (run via migration tool).
+•	Run backend tests, start server and hit endpoints.
+________________________________________
+9) Logging & auditing
+•	Log every amount adjustment in order_amount_adjustments.
+•	Keep last_amount_update_at on orders for quick auditing.
+•	Add an order_history record when adjustments are requested/approved/declined.
+________________________________________
+10) Step-by-step procedure for Orchids (detailed, sequential)
+1.	Add DB fields & tables
+o	Apply the SQL migration above (orders columns + order_amount_adjustments + pricing_minimums).
+o	Confirm migration success and backup DB.
+2.	Add env variables
+o	Add the minimum and manager fee env vars to .env and hosting provider.
+3.	Implement backend logic
+o	Update POST /orders to validate client_cpp against pricing_minimums.
+o	Add endpoints for manager additional requests, client topups, and approval flows.
+o	Implement recomputeTotal(orderId) service for centralized total calculation.
+o	Ensure every update that affects money runs inside a DB transaction.
+4.	Update payments pipeline
+o	Wire Mpesa webhook to POST /api/payments/confirm which triggers invoice generation and balance updates.
+o	Ensure invoice has breakdown fields (freelancer_amount / manager_amount / company_fee).
+5.	Frontend changes
+o	Order form: add CPP input behavior (hide min until typing; show real-time validation).
+o	Order detail: show pending requested adjustments, allow client to Approve/Reject manager request.
+o	After admin accept: show "Add Bonus/Top-up" button.
+6.	Accounting & Payout
+o	Update invoice generation logic to include manager & freelancer calculations per policy.
+o	Add admin view to confirm payments and payout (or integrate automatic payout).
+7.	Testing
+o	Run provided unit/integration tests. Perform manual flows: create order -> manager request -> client approve -> pay -> invoices / balances check.
+8.	Monitoring & logs
+o	Add breadcrumbs for amount changes, payment failures, and webhook receipts.
+o	Add admin UI to view adjustment history per order.
+9.	Edge cases & hardening
+o	Prevent negative totals.
+o	Prevent double-apply of the same adjustment (use unique ids/timestamps and status).
+o	Rate-limit topup/adjustment endpoints to avoid spam.
+10.	Deploy
+•	Deploy to staging first. Test live Mpesa sandbox flow if possible. Then deploy to production.
+________________________________________
+11) Example curl flows
+Manager requests extra:
+curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"amount": 500, "note":"Complex tables, need extra review"}' \
+  https://yourapi.com/api/orders/ORDER_ID/request-additional
+Client approves manager request:
+curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  https://yourapi.com/api/orders/ORDER_ID/approve-adjustment
+Client top-up:
+curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"amount": 200, "note":"tip for fast delivery"}' \
+  https://yourapi.com/api/orders/ORDER_ID/topup
+________________________________________
+12) Notes & recommendations
+•	Keep one service function recomputeOrderAmounts(orderId) that is used everywhere to avoid divergent logic.
+•	Use DB transactions for every money-related change.
+•	Keep user-visible messages clear: when admin requests extra, include a reason and allow client to approve/reject.
+•	Keep pricing_minimums modifiable by admin from dashboard (with audit).
+•	Add email/notification triggers when adjustments are requested or approved.
+

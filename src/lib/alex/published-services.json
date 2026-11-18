@@ -1,0 +1,314 @@
+[
+  {
+    "id": "/services/academic-support",
+    "title": "Academic Support, Postgraduate Thesis & Dissertation Assistance Kenya",
+    "description": "Master’s and PhD dissertation guidance, conceptual frameworks, methodology design, APA 7th / Harvard referencing, and official Turnitin similarity reports overseen by senior academic editors.",
+    "href": "/services/academic-support"
+  },
+  {
+    "id": "/services/academic-writing",
+    "title": "Academic Writing Services",
+    "description": "Essays, research papers, dissertations, case studies, and more — written by verified subject-matter experts and reviewed by professional editors.",
+    "href": "/services/academic-writing"
+  },
+  {
+    "id": "/services/academic-writing/mba-thesis-proofreading-kenya",
+    "title": "MBA Thesis Proofreading Kenya",
+    "description": "Professional MBA thesis proofreading and editing in Kenya. Expert APA 7th & Harvard formatting, Turnitin plagiarism audit under 10%, rubric alignment, and supervisor revision support. Strathmore, UoN, USIU experts.",
+    "href": "/services/academic-writing/mba-thesis-proofreading-kenya"
+  },
+  {
+    "id": "/services/accounting-support",
+    "title": "Accounting, Bookkeeping & Financial Reporting Services Kenya",
+    "description": "Professional bookkeeping, bank reconciliation, P&L statements, balance sheet preparation, payroll support, and QuickBooks/Xero management by accredited Kenyan accountants under TaskLynk oversight.",
+    "href": "/services/accounting-support"
+  },
+  {
+    "id": "/services/business-research",
+    "title": "Market Research, Business Plans & Feasibility Studies Kenya",
+    "description": "Bank-ready business plans with 5-year pro-forma financials, commercial feasibility studies, competitor intelligence, and market sizing reports prepared by verified business researchers.",
+    "href": "/services/business-research"
+  },
+  {
+    "id": "/services/business-services",
+    "title": "Business Services",
+    "description": "Business reports, presentations, marketing plans, proposals, CVs, and company profiles crafted by professionals who understand the Kenyan market.",
+    "href": "/services/business-services"
+  },
+  {
+    "id": "/services/business/business-analysis",
+    "title": "Business Analysis Services",
+    "description": "Professional business analysis services for requirements gathering, process mapping, workflow optimization, stakeholder analysis, and strategic planning. Hire vetted business analysts.",
+    "href": "/services/business/business-analysis"
+  },
+  {
+    "id": "/services/business/business-plans",
+    "title": "Professional Business Plan Writing Services",
+    "description": "Professional business plan writing services including strategic plans, investor pitch decks, feasibility studies, and market analysis. Hire vetted business strategists for funding readiness.",
+    "href": "/services/business/business-plans"
+  },
+  {
+    "id": "/services/business/financial-analysis",
+    "title": "Financial Analysis Services",
+    "description": "Professional financial analysis services including financial modeling, valuation, investment analysis, cash flow forecasting, and financial reporting. Hire vetted financial analysts for data-driven decisions.",
+    "href": "/services/business/financial-analysis"
+  },
+  {
+    "id": "/services/business/market-research",
+    "title": "Market Research Services",
+    "description": "Professional market research services including customer surveys, competitive analysis, market sizing, segmentation, and consumer insights. Hire vetted market research analysts for actionable business intelligence.",
+    "href": "/services/business/market-research"
+  },
+  {
+    "id": "/services/business/presentation-design",
+    "title": "Professional Presentation Design Services",
+    "description": "Professional presentation design services including PowerPoint decks, pitch decks, investor presentations, and slide design. Hire vetted presentation designers for compelling visual storytelling.",
+    "href": "/services/business/presentation-design"
+  },
+  {
+    "id": "/services/business/virtual-assistance",
+    "title": "Virtual Assistant Services",
+    "description": "Professional virtual assistant services for administrative tasks, email management, calendar scheduling, data entry, customer support, and business operations. Hire vetted virtual assistants.",
+    "href": "/services/business/virtual-assistance"
+  },
+  {
+    "id": "/services/data-analysis",
+    "title": "Data Analysis Services",
+    "description": "Professional statistical analysis using SPSS, Excel, R, Python, and STATA — with full interpretation reports and data visualization.",
+    "href": "/services/data-analysis"
+  },
+  {
+    "id": "/services/data-analysis/data-analysis-services",
+    "title": "Hire Top Data Analysis Freelancers",
+    "description": "Access vetted data analysts skilled in SPSS, R, Python, Excel, and STATA. Secure milestone payments, real-time collaboration, and defensible statistical insights for research, business, and policy projects.",
+    "href": "/services/data-analysis/data-analysis-services"
+  },
+  {
+    "id": "/services/data-analysis/data-visualization-services",
+    "title": "Hire Data Visualization Freelancers",
+    "description": "Transform your data into interactive dashboards and compelling visualizations. Hire vetted freelancers skilled in Power BI, Tableau, Python, and Google Data Studio for real-time business intelligence.",
+    "href": "/services/data-analysis/data-visualization-services"
+  },
+  {
+    "id": "/services/data-analysis/excel-data-analysis",
+    "title": "Excel Data Analysis Services",
+    "description": "Professional Excel data analysis services including pivot tables, formulas, dashboards, statistical analysis, VBA automation, and data visualization. Hire vetted Excel experts.",
+    "href": "/services/data-analysis/excel-data-analysis"
+  },
+  {
+    "id": "/services/data-analysis/python-data-analysis",
+    "title": "Python Data Analysis Services",
+    "description": "Professional Python data analysis services using pandas, NumPy, SciPy, scikit-learn, and matplotlib. Hire vetted Python data analysts for data science, ML integration, and statistical analysis.",
+    "href": "/services/data-analysis/python-data-analysis"
+  },
+  {
+    "id": "/services/data-analysis/quantitative-data-analysis",
+    "title": "Quantitative Data Analysis Services",
+    "description": "Hire vetted quantitative data analysts for regression, ANOVA, factor analysis, hypothesis testing, and statistical modeling. Secure milestone payments and NDA protection.",
+    "href": "/services/data-analysis/quantitative-data-analysis"
+  },
+  {
+    "id": "/services/data-analysis/r-statistical-analysis",
+    "title": "R Statistical Analysis Services",
+    "description": "Professional R statistical analysis services using ggplot2, dplyr, tidyr, and advanced modeling. Hire vetted R analysts for statistical computing, data visualization, and reproducible research with R Markdown.",
+    "href": "/services/data-analysis/r-statistical-analysis"
+  },
+  {
+    "id": "/services/data-analysis/research-data-analysis-services",
+    "title": "Research Data Analysis Services",
+    "description": "End-to-end research data analysis including data collection, cleaning, statistical analysis, visualization, and publication-ready reporting. Hire vetted research analysts.",
+    "href": "/services/data-analysis/research-data-analysis-services"
+  },
+  {
+    "id": "/services/data-analysis/spss-data-analysis-services",
+    "title": "SPSS Data Analysis Services",
+    "description": "Professional SPSS data analysis services with syntax files, output interpretation, and APA-formatted results. Hire vetted SPSS analysts for descriptive stats, regression, ANOVA, and factor analysis.",
+    "href": "/services/data-analysis/spss-data-analysis-services"
+  },
+  {
+    "id": "/services/data-analysis/spss-data-analysis-services-nairobi",
+    "title": "SPSS Data Analysis Services Nairobi",
+    "description": "Premier SPSS data analysis services in Nairobi, Kenya. Expert Chapter 4 dissertation writeups, hypothesis testing, regression, ANOVA, and factor analysis. Local Nairobi analysts, APA 7th format, M-Pesa payments.",
+    "href": "/services/data-analysis/spss-data-analysis-services-nairobi"
+  },
+  {
+    "id": "/services/data-analysis/stata-statistical-analysis",
+    "title": "STATA Statistical Analysis Services",
+    "description": "Professional STATA statistical analysis services for econometrics, panel data analysis, time series, regression modeling, and survey data. Hire vetted STATA analysts with .do files and interpretation.",
+    "href": "/services/data-analysis/stata-statistical-analysis"
+  },
+  {
+    "id": "/services/data-analysis/survey-data-analysis",
+    "title": "Survey Data Analysis Services",
+    "description": "Transform raw survey responses into statistically valid insights. Hire vetted survey data analysts for cross-tabulation, regression, factor analysis, and survey weighting. Secure and confidential.",
+    "href": "/services/data-analysis/survey-data-analysis"
+  },
+  {
+    "id": "/services/data-analytics",
+    "title": "Statistical Data Analysis & Business Intelligence Services",
+    "description": "Expert SPSS, R, Python, Stata, and Power BI data analysis for postgraduate dissertations, business intelligence dashboards, and market research. Rigorous APA tables, hypothesis testing, and narrative interpretation.",
+    "href": "/services/data-analytics"
+  },
+  {
+    "id": "/services/data-processing",
+    "title": "Data Processing, Data Entry & Office Productivity Services",
+    "description": "Fast, accurate data entry, survey data cleaning, Excel spreadsheet formatting, PDF-to-Word conversion, and document preparation handled by verified specialists under TaskLynk quality control.",
+    "href": "/services/data-processing"
+  },
+  {
+    "id": "/services/graphic-design",
+    "title": "Graphic Design & Brand Identity Services Kenya",
+    "description": "Distinctive corporate branding, logo design, company profiles, investor pitch decks, and marketing collateral designed by accredited visual artists under managed quality assurance.",
+    "href": "/services/graphic-design"
+  },
+  {
+    "id": "/services/marketing/content-writing",
+    "title": "Professional Content Writing Services",
+    "description": "Professional content writing services for blogs, articles, website copy, SEO content, product descriptions, and marketing copy. Hire vetted content writers for engaging, conversion-focused content.",
+    "href": "/services/marketing/content-writing"
+  },
+  {
+    "id": "/services/marketing/digital-advertising",
+    "title": "Digital Advertising Services",
+    "description": "Professional digital advertising services including Google Ads, Facebook/Instagram ads, LinkedIn ads, TikTok ads, and social media advertising. Hire vetted PPC specialists and ad campaign managers.",
+    "href": "/services/marketing/digital-advertising"
+  },
+  {
+    "id": "/services/marketing/graphic-design",
+    "title": "Professional Graphic Design Services",
+    "description": "Professional graphic design services including brand identity, logos, marketing materials, infographics, social media graphics, and packaging design. Hire vetted graphic designers.",
+    "href": "/services/marketing/graphic-design"
+  },
+  {
+    "id": "/services/marketing/seo-services",
+    "title": "Professional SEO Services",
+    "description": "Professional SEO services for keyword research, on-page optimization, content strategy, link building, and local SEO. Hire vetted SEO specialists for improved search engine rankings and organic traffic.",
+    "href": "/services/marketing/seo-services"
+  },
+  {
+    "id": "/services/marketing/social-media-management",
+    "title": "Social Media Management Services",
+    "description": "Professional social media management services for content creation, community management, advertising, and growth strategy across Facebook, Instagram, Twitter, LinkedIn, and TikTok. Hire vetted social media managers.",
+    "href": "/services/marketing/social-media-management"
+  },
+  {
+    "id": "/services/marketing/video-editing",
+    "title": "Professional Video Editing Services",
+    "description": "Professional video editing services for marketing videos, social media reels, corporate presentations, event highlights, training videos, and YouTube content. Hire vetted video editors.",
+    "href": "/services/marketing/video-editing"
+  },
+  {
+    "id": "/services/professional-writing",
+    "title": "Professional Writing, Corporate Profiles & Executive Presentations",
+    "description": "Executive CVs, corporate capability statements, service contracts, NDAs, annual reports, and investor presentation decks written and edited by accredited communications specialists.",
+    "href": "/services/professional-writing"
+  },
+  {
+    "id": "/services/research/data-collection",
+    "title": "Research Data Collection Services",
+    "description": "Professional research data collection services including online surveys, interviews, focus groups, fieldwork coordination, and transcription. Hire vetted research data collectors.",
+    "href": "/services/research/data-collection"
+  },
+  {
+    "id": "/services/research/data-editing",
+    "title": "Research Data Editing & Cleaning Services",
+    "description": "Professional data cleaning and editing services for research datasets. Handle missing values, outliers, variable recoding, format conversion, and validation across SPSS, R, Python, STATA, and Excel.",
+    "href": "/services/research/data-editing"
+  },
+  {
+    "id": "/services/research/literature-research",
+    "title": "Literature Research Services",
+    "description": "Professional literature research including systematic reviews, scoping reviews, meta-analyses, reference management, and annotated bibliographies. Hire vetted research professionals.",
+    "href": "/services/research/literature-research"
+  },
+  {
+    "id": "/services/research/proofreading",
+    "title": "Research Paper Proofreading",
+    "description": "Professional research paper proofreading by accredited editors. Grammar, punctuation, academic tone, citation accuracy, and formatting compliance. Secure NDA protection and fast turnaround.",
+    "href": "/services/research/proofreading"
+  },
+  {
+    "id": "/services/research/research-assistance",
+    "title": "Hire Research Assistants",
+    "description": "Access vetted research assistants for literature reviews, data collection, systematic reviews, and research support. Secure milestone payments and expert guidance for academic projects.",
+    "href": "/services/research/research-assistance"
+  },
+  {
+    "id": "/services/research/survey-design",
+    "title": "Survey & Questionnaire Design Services",
+    "description": "Professional survey and questionnaire design services following best practices for cognitive testing, scale development, and instrument validation. Get reliable data from your first question to your last.",
+    "href": "/services/research/survey-design"
+  },
+  {
+    "id": "/services/software-development",
+    "title": "Software Development & Systems Engineering",
+    "description": "Custom software engineering, cloud APIs, microservices, database architecture, and automation systems delivered by accredited engineers under managed quality assurance.",
+    "href": "/services/software-development"
+  },
+  {
+    "id": "/services/systems-integration",
+    "title": "Systems Integration & API Automation Services",
+    "description": "Connect your disparate CRM, ERP, M-Pesa, accounting, and cloud databases with reliable automated workflows and API pipelines managed by TaskLynk.",
+    "href": "/services/systems-integration"
+  },
+  {
+    "id": "/services/technical-services",
+    "title": "Technical Services",
+    "description": "Coding assignments, engineering problem sets, nursing simulations, and technical documentation handled by specialists with real field experience.",
+    "href": "/services/technical-services"
+  },
+  {
+    "id": "/services/technical/ai-development",
+    "title": "AI Development Services",
+    "description": "Hire vetted AI developers and ML engineers for machine learning models, LLM integration, NLP, computer vision, and generative AI solutions. Secure milestone payments and expert AI talent.",
+    "href": "/services/technical/ai-development"
+  },
+  {
+    "id": "/services/technical/api-development",
+    "title": "API Development Services",
+    "description": "Hire vetted API developers for RESTful and GraphQL API design, microservices architecture, authentication, rate limiting, and API testing. Secure milestone payments and expert backend engineering.",
+    "href": "/services/technical/api-development"
+  },
+  {
+    "id": "/services/technical/automation-services",
+    "title": "Process Automation Services",
+    "description": "Hire vetted automation specialists for RPA (UiPath, Automation Anywhere, Blue Prism), workflow automation, business process automation, and data pipeline development. Secure milestone payments.",
+    "href": "/services/technical/automation-services"
+  },
+  {
+    "id": "/services/technical/database-services",
+    "title": "Database Development & Management Services",
+    "description": "Hire vetted database engineers for PostgreSQL, MySQL, MongoDB, Redis, and Supabase. Schema design, optimization, migration, backup, and security. Secure milestone payments and expert DBA support.",
+    "href": "/services/technical/database-services"
+  },
+  {
+    "id": "/services/technical/react-development",
+    "title": "Hire React Developers",
+    "description": "Hire vetted React developers and frontend engineers for custom React applications, component libraries, Next.js development, and mobile-first interfaces. Secure milestone payments and proven expertise.",
+    "href": "/services/technical/react-development"
+  },
+  {
+    "id": "/services/technical/web-development",
+    "title": "Hire Web Developers",
+    "description": "Hire vetted web developers for custom websites, e-commerce platforms, SaaS applications, and responsive web development. Secure milestone payments, real-time collaboration, and expert full-stack talent.",
+    "href": "/services/technical/web-development"
+  },
+  {
+    "id": "/services/video-production",
+    "title": "Corporate Video Production & Video Editing Services",
+    "description": "Professional corporate video editing, motion graphics, social media reels, promotional trailers, and YouTube content optimization managed by TaskLynk creative directors.",
+    "href": "/services/video-production"
+  },
+  {
+    "id": "/services/virtual-assistance",
+    "title": "Virtual Assistance & Business Administration Services Kenya",
+    "description": "Executive virtual assistance, calendar management, inbox zero, customer support desk, document preparation, and CRM administration handled by verified professionals under TaskLynk supervision.",
+    "href": "/services/virtual-assistance"
+  },
+  {
+    "id": "/services/website-development",
+    "title": "Website & Web Development Services Kenya",
+    "description": "Custom corporate websites, high-converting landing pages, e-commerce stores, and Next.js web applications engineered for speed, SEO, and security. Handled by verified Kenyan engineers under dedicated project management.",
+    "href": "/services/website-development"
+  }
+]

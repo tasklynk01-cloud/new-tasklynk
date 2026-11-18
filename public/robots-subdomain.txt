@@ -1,0 +1,8 @@
+# Robots.txt for subdomain (tasklynkacademic.online)
+# This subdomain should NOT be indexed - main domain is www.tasklynk.co.ke
+
+User-agent: *
+Disallow: /
+
+# Canonical domain
+Sitemap: https://www.tasklynk.co.ke/sitemap.xml

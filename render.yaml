@@ -1,0 +1,66 @@
+# ====================================
+# Render.com Deployment Configuration
+# ====================================
+# TaskLynk Academic Writing Platform
+# Production hosting on Render with Cloudflare protection
+
+services:
+  - type: web
+    name: tasklynk-academic-space
+    runtime: node
+    region: oregon # or frankfurt for EU
+    plan: starter # upgrade to standard for production
+    
+    # Build Configuration
+    buildCommand: npm install --legacy-peer-deps && npm run build
+    startCommand: npm start
+    
+    # Environment
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      # All other environment variables should be added via Render Dashboard
+      # Go to: Dashboard → Your Service → Environment → Add Environment Variable
+      
+    # Health Check
+    healthCheckPath: /api/health
+    
+    # Auto-deploy on push to main branch
+    autoDeploy: true
+    
+    # Branch to deploy
+    branch: fresh-main
+
+# ====================================
+# RENDER DASHBOARD ENVIRONMENT VARIABLES
+# ====================================
+# Add these via Render Dashboard (not in this file for security):
+#
+# 🔒 SECURITY & AUTHENTICATION
+# - JWT_SECRET (min 32 characters)
+# - NEXTAUTH_SECRET
+# - NEXTAUTH_URL=https://tasklynk.co.ke
+#
+# 🗄️ DATABASE - TURSO
+# - TURSO_CONNECTION_URL
+# - TURSO_AUTH_TOKEN
+# - DATABASE_URL
+#
+# 📁 FILE STORAGE - CLOUDINARY
+# - CLOUDINARY_CLOUD_NAME
+# - CLOUDINARY_API_KEY
+# - CLOUDINARY_API_SECRET
+# - CLOUDINARY_UPLOAD_PRESET
+#
+# 📧 EMAIL - RESEND
+# - RESEND_API_KEY  (from https://resend.com/api-keys)
+# - FROM_EMAIL=onboarding@resend.dev  (or an address on a domain verified in Resend)
+#
+# 💳 PAYMENT - PAYSTACK
+# - PAYSTACK_SECRET_KEY
+# - NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY
+#
+# 🔧 APPLICATION
+# - NEXT_PUBLIC_APP_URL=https://tasklynk.co.ke

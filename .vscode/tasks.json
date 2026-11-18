@@ -1,0 +1,83 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "check-users-columns",
+			"type": "shell",
+			"command": "npx tsx scripts\\check-users-columns.ts",
+			"isBackground": false
+		},
+		{
+			"label": "add-payment-terms",
+			"type": "shell",
+			"command": "npx tsx scripts\\add-payment-terms-column.ts",
+			"isBackground": false
+		},
+		{
+			"label": "test-registration-flow",
+			"type": "shell",
+			"command": "npx tsx scripts\\test-registration-flow.ts",
+			"isBackground": false
+		},
+		{
+			"label": "registration-flow",
+			"type": "shell",
+			"command": "npx tsx scripts\\test-registration-flow.ts",
+			"isBackground": false
+		},
+		{
+			"label": "registration-flow-log",
+			"type": "shell",
+			"command": "cmd"
+		},
+		{
+			"label": "list-auto-users",
+			"type": "shell",
+			"command": "npx tsx scripts\\list-auto-users.ts",
+			"isBackground": false,
+			"args": [
+				"/d",
+				"/c",
+				"cd /d d:\\TaskLynk\\TaskLynk\\tasklynk-academic-space && npx tsx scripts\\test-registration-flow.ts > tmp\\registration-run.log 2>&1"
+			]
+		},
+		{
+			"label": "registration-flow-log",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/d",
+				"/c",
+				"cd /d d:\\TaskLynk\\TaskLynk\\tasklynk-academic-space && npx tsx scripts\\test-registration-flow.ts > tmp\\registration-run.log 2>&1"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "list-auto-users",
+			"type": "shell",
+			"command": "npx tsx scripts\\list-auto-users.ts",
+			"isBackground": false
+		},
+		{
+			"label": "list-auto-users-log",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/d",
+				"/c",
+				"cd /d d:\\TaskLynk\\TaskLynk\\tasklynk-academic-space && npx tsx scripts\\list-auto-users.ts > tmp\\list-auto-users.log 2>&1"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "verify-build",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"isBackground": false
+		}
+	]
+}

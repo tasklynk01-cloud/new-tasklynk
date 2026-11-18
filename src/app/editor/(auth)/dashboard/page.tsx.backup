@@ -1,0 +1,475 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useAuth } from "@/lib/auth-context-v2";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  AlertCircle,
+  ArrowUpRight,
+  CheckCircle2,
+  Download,
+  Loader2,
+  RefreshCw,
+  Search,
+  Sparkles,
+  TimerReset,
+} from "lucide-react";
+import { toast } from "sonner";
+
+type Order = {
+  id: number;
+  displayId?: string | null;
+  orderNumber: string;
+  title: string;
+  pages: number | null;
+  slides: number | null;
+  deadline: string | null;
+  status: string;
+  editorStatus: string;
+  subject: string | null;
+  amount: number;
+  editorNotes?: string | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+  isOverdue?: boolean;
+};
+
+type AssignmentSummary = {
+  id: number;
+  jobId: number;
+  displayId: string;
+  title: string;
+  status: string;
+  assignedAt: string;
+  reviewStartedAt: string | null;
+  updatedAt: string | null;
+  revisionNotes: string | null;
+};
+
+type DashboardStats = {
+  pendingReviews: number;
+  inReview: number;
+  approved: number;
+  rejected: number;
+  totalReviewed: number;
+  approvalRate: number;
+  queueOverdue?: number;
+  revisionAlerts?: number;
+  activeAssignments?: number;
+  averageTurnaroundHours?: number | null;
+};
+
+type DashboardData = {
+  editor: {
+    id: number;
+    name: string;
+    email: string;
+    displayId?: string;
+    completedJobs?: number;
+    balance?: number;
+  };
+  profile?: Record<string, any> | null;
+  stats: DashboardStats;
+  orders: Order[];
+  queue?: {
+    overdue: Order[];
+    flagged: Order[];
+  };
+  assignments?: {
+    active: AssignmentSummary[];
+    recentApprovals: AssignmentSummary[];
+    recentRejections: AssignmentSummary[];
+  };
+};
+
+const STATUS_META: Record<
+  string,
+  {
+    label: string;
+    description: string;
+    accent: string;
+    badgeVariant: "default" | "secondary" | "outline";
+  }
+> = {
+  pending_editing: {
+    label: "Ready to Claim",
+    description: "Orders waiting for an editor",
+    accent: "from-amber-500/10 to-amber-700/10 border-amber-600/40",
+    badgeVariant: "outline",
+  },
+  editing_in_progress: {
+    label: "In Progress",
+    description: "Currently being revised",
+    accent: "from-sky-500/10 to-sky-700/10 border-sky-600/40",
+    badgeVariant: "default",
+  },
+  awaiting_revision: {
+    label: "Needs Follow-up",
+    description: "Waiting on internal fixes",
+    accent: "from-orange-500/10 to-orange-700/10 border-orange-600/40",
+    badgeVariant: "secondary",
+  },
+  awaiting_admin_review: {
+    label: "Ready for Admin",
+    description: "Hand off to admin next",
+    accent: "from-emerald-500/10 to-emerald-700/10 border-emerald-600/40",
+    badgeVariant: "default",
+  },
+};
+
+function formatDeadline(value: string | null | undefined) {
+  if (!value) return "No deadline";
+  try {
+    return new Intl.DateTimeFormat("en-KE", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
+function HoursBadge({ hours }: { hours: number | null | undefined }) {
+  if (hours === null || hours === undefined) return <span className="text-sm text-muted-foreground">--</span>;
+  return <span className="text-lg font-semibold">{hours}h</span>;
+}
+
+export default function EditorDashboardPage() {
+  const { user } = useAuth();
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const hasFetched = useRef(false);
+
+  const fetchDashboard = async () => {
+    if (!user) return;
+    try {
+      setIsLoading(true);
+      setError(null);
+      const token = localStorage.getItem("bearer_token");
+      const url = `/api/editor/dashboard?editorId=${user.id}&_=${Date.now()}`;
+      const response = await fetch(url, {
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || "Failed to load dashboard");
+      }
+
+      const payload = await response.json();
+      setDashboardData(payload);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load dashboard";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    if (!hasFetched.current) {
+      hasFetched.current = true;
+      fetchDashboard();
+    }
+
+    const interval = setInterval(fetchDashboard, 30000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  const handleExport = async () => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem("bearer_token");
+      const response = await fetch(`/api/editor/assignments?editorId=${user.id}&format=csv`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!response.ok) throw new Error("Export failed");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `editor-assignments-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+      toast.success("Assignments exported");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Export failed");
+    }
+  };
+
+  const filteredOrders = useMemo(() => {
+    if (!dashboardData) return [] as Order[];
+    const value = searchTerm.trim().toLowerCase();
+    if (!value) return dashboardData.orders;
+    return dashboardData.orders.filter((order) => {
+      return [order.displayId, order.orderNumber, order.title]
+        .filter(Boolean)
+        .some((field) => field!.toLowerCase().includes(value));
+    });
+  }, [dashboardData, searchTerm]);
+
+  const buckets = useMemo(() => {
+    const map = new Map<string, Order[]>();
+    filteredOrders.forEach((order) => {
+      const key = order.editorStatus || "pending_editing";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(order);
+    });
+    return map;
+  }, [filteredOrders]);
+
+  const stats = dashboardData?.stats;
+  const queueOverdue = dashboardData?.queue?.overdue || [];
+  const flagged = dashboardData?.queue?.flagged || [];
+  const activeAssignments = dashboardData?.assignments?.active || [];
+
+  if (isLoading && !dashboardData) {
+    return (
+      <div className="flex h-72 items-center justify-center">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error && !dashboardData) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-16">
+        <AlertCircle className="h-10 w-10 text-destructive" />
+        <p className="text-muted-foreground">{error}</p>
+        <Button onClick={fetchDashboard}>Retry</Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen -m-6 bg-gradient-to-br from-slate-950 via-slate-930 to-slate-900 text-slate-50">
+      <div className="px-4 py-8 sm:px-6 lg:px-10">
+        <section className="mb-6 flex flex-col gap-4 rounded-3xl border border-white/10 bg-gradient-to-r from-indigo-900/70 via-slate-900/60 to-slate-900/40 p-6 shadow-2xl">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Quality Console</p>
+              <h1 className="mt-1 text-3xl font-semibold text-white md:text-4xl">
+                Hi {dashboardData?.editor.name ?? "Editor"}, your queue is ready
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm text-slate-300">
+                Track every manuscript transitioning through editing, stay ahead of deadlines, and hand work
+                off to admins with confidence.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="border-white/30 text-white" onClick={handleExport}>
+                <Download className="mr-2 h-4 w-4" /> Export CSV
+              </Button>
+              <Button className="bg-white/90 text-slate-900 hover:bg-white" onClick={fetchDashboard}>
+                <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        {/* Metrics grid */}
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            {
+              label: "Pending Reviews",
+              value: stats?.pendingReviews ?? 0,
+              icon: Sparkles,
+              help: "Orders currently in the editor lane",
+            },
+            {
+              label: "In Review",
+              value: stats?.inReview ?? 0,
+              icon: TimerReset,
+              help: "Assignments you have touched",
+            },
+            {
+              label: "Approval Rate",
+              value: `${stats?.approvalRate ?? 0}%`,
+              icon: CheckCircle2,
+              help: "Based on completed QC tasks",
+            },
+            {
+              label: "Avg Turnaround",
+              value: <HoursBadge hours={stats?.averageTurnaroundHours} />,
+              icon: ArrowUpRight,
+              help: "Time from accept → finish",
+            },
+          ].map(({ label, value, icon: Icon, help }) => (
+            <Card key={label} className="border-white/5 bg-white/5">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardDescription className="text-xs uppercase tracking-widest text-slate-400">{label}</CardDescription>
+                <Icon className="h-5 w-5 text-white/70" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-semibold text-white">{typeof value === "number" ? value : value}</div>
+                <p className="mt-1 text-xs text-slate-400">{help}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </section>
+
+        {/* Command bar */}
+        <section className="mt-8 flex flex-col gap-3 rounded-2xl border border-white/5 bg-white/5 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-white/10 p-3">
+              <Search className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <p className="text-sm text-slate-200">Filter work queue</p>
+              <p className="text-xs text-slate-400">Search by ID, title, or order number</p>
+            </div>
+          </div>
+          <Input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Quick search"
+            className="bg-slate-900/70 text-white placeholder:text-slate-500"
+          />
+        </section>
+
+        {/* Work lanes */}
+        <section className="mt-8 grid gap-4 xl:grid-cols-4">
+          {Object.entries(STATUS_META).map(([statusKey, meta]) => {
+            const ordersForLane = buckets.get(statusKey) ?? [];
+            return (
+              <Card
+                key={statusKey}
+                className={`border ${meta.accent} backdrop-blur-lg bg-gradient-to-br text-white`}
+              >
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-lg">{meta.label}</CardTitle>
+                      <CardDescription className="text-xs text-white/70">{meta.description}</CardDescription>
+                    </div>
+                    <Badge variant={meta.badgeVariant}>{ordersForLane.length}</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  {ordersForLane.length === 0 && (
+                    <p className="text-sm text-white/70">No orders in this lane.</p>
+                  )}
+                  {ordersForLane.slice(0, 4).map((order) => (
+                    <div key={order.id} className="rounded-xl border border-white/20 bg-white/5 p-3 text-sm">
+                      <div className="flex items-center justify-between">
+                        <p className="font-medium">{order.title || "Untitled"}</p>
+                        {order.isOverdue && (
+                          <span className="text-xs text-rose-300">Overdue</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-white/70">{order.displayId || order.orderNumber}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-white/60">
+                        <span>{order.pages ?? 0} pages</span>
+                        {order.subject && <span>• {order.subject}</span>}
+                        <span>• Due {formatDeadline(order.deadline)}</span>
+                      </div>
+                      <div className="mt-3 flex gap-2">
+                        <Link href={`/editor/review/${order.id}`} className="w-full">
+                          <Button size="sm" variant="secondary" className="w-full bg-white text-slate-900">
+                            Open Workspace
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                  {ordersForLane.length > 4 && (
+                    <p className="text-xs text-white/70">+{ordersForLane.length - 4} more</p>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </section>
+
+        {/* Queue health and assignments */}
+        <section className="mt-10 grid gap-6 lg:grid-cols-2">
+          <Card className="border-white/5 bg-white/5">
+            <CardHeader>
+              <CardTitle className="text-lg text-white">Queue Health</CardTitle>
+              <CardDescription className="text-slate-300">
+                Overdue or flagged orders that need immediate attention
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {[{ title: "Overdue", data: queueOverdue }, { title: "Flagged", data: flagged }].map((group) => (
+                <div key={group.title}>
+                  <p className="text-xs uppercase tracking-widest text-slate-400">{group.title}</p>
+                  {group.data.length === 0 ? (
+                    <p className="text-sm text-slate-500">Nothing in this bucket. Keep cruising.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-2">
+                      {group.data.slice(0, 4).map((order) => (
+                        <li key={order.id} className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm">
+                          <div className="flex items-center justify-between">
+                            <p>{order.displayId || order.orderNumber}</p>
+                            <Badge variant="outline">{formatDeadline(order.deadline)}</Badge>
+                          </div>
+                          <p className="text-xs text-slate-400">{order.title ?? "Untitled"}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="border-white/5 bg-white/5">
+            <CardHeader>
+              <CardTitle className="text-lg text-white">Active Assignments</CardTitle>
+              <CardDescription className="text-slate-300">
+                Work you have personally accepted
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {activeAssignments.length === 0 && (
+                <p className="text-sm text-slate-500">No active assignments. Grab one from the queue.</p>
+              )}
+              {activeAssignments.slice(0, 5).map((assignment) => (
+                <div key={assignment.id} className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{assignment.title}</p>
+                      <p className="text-xs text-slate-400">{assignment.displayId}</p>
+                    </div>
+                    <Badge>{assignment.status}</Badge>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                    <span>Assigned {formatDeadline(assignment.assignedAt)}</span>
+                    {assignment.reviewStartedAt && <span>• Started {formatDeadline(assignment.reviewStartedAt)}</span>}
+                  </div>
+                  {assignment.revisionNotes && (
+                    <p className="mt-2 text-xs text-slate-300">{assignment.revisionNotes}</p>
+                  )}
+                  <div className="mt-3">
+                    <Link href={`/editor/review/${assignment.jobId}`}>
+                      <Button size="sm" variant="outline" className="border-white/40 text-white">
+                        Resume
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </section>
+      </div>
+    </div>
+  );
+}

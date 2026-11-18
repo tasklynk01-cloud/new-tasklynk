@@ -1,0 +1,30 @@
+{
+  "name": "TaskLynk Academic - Managed Academic & Freelance Marketplace",
+  "short_name": "TaskLynk",
+  "description": "Professional academic writing, data analysis, and freelance specialist platform in Kenya",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#241B3F",
+  "theme_color": "#241B3F",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/tl-logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/tl-logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/tl-logo.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

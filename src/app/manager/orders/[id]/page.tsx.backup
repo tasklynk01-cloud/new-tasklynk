@@ -1,0 +1,2725 @@
+"use client";
+
+import { useEffect, useState, useCallback, useRef } from 'react';
+import dynamic from 'next/dynamic';
+import { useAuth } from '@/lib/auth-context-v2';
+import { useRouter, useParams } from 'next/navigation';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { 
+  CheckCircle, 
+  XCircle, 
+  UserPlus, 
+  Download, 
+  AlertCircle,
+  ArrowLeft, 
+  Send, 
+  MessageSquare, 
+  Wallet, 
+  FileUp, 
+  Loader2, 
+  UserX, 
+  Mail, 
+  PauseCircle,
+  Paperclip,
+  X,
+  Ban,
+  Eye,
+  FileCheck,
+  Award,
+  MinusCircle
+} from 'lucide-react';
+import { format } from 'date-fns';
+import Link from 'next/link';
+import { CountdownTimer } from '@/components/countdown-timer';
+import { toast } from 'sonner';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { calculateWriterEarningsByCPPLevel } from '@/lib/payment-calculations';
+import { FreelancerCPPDisplay } from '@/components/freelancer/FreelancerCPPDisplay';
+import { FreelancerStatsDisplay } from '@/components/freelancer/FreelancerStatsDisplay';
+
+type Job = {
+  id: number;
+  displayId?: string;
+  orderNumber: string;
+  clientId: number;
+  title: string;
+  instructions: string;
+  workType: string;
+  pages: number | null;
+  slides: number | null;
+  amount: number;
+  deadline: string;
+  actualDeadline: string;
+  freelancerDeadline: string;
+  status: string;
+  assignedFreelancerId: number | null;
+  adminApproved: boolean;
+  clientApproved: boolean;
+  revisionRequested: boolean;
+  revisionNotes: string | null;
+  paymentConfirmed: boolean;
+  createdAt: string;
+  client?: { id: number; displayId?: string; name: string };
+  writer?: { id: number; displayId?: string; name: string };
+};
+
+type Freelancer = {
+  id: number;
+  name: string;
+  email: string;
+  rating: number | null;
+  balance: number;
+  completedJobs?: number;
+};
+
+type Attachment = {
+  id: number;
+  jobId: number;
+  uploadedBy: number;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number;
+  fileType: string;
+  uploadType: string;
+  uploaderRole?: string;
+  createdAt: string;
+  notes?: string | null;
+};
+
+type Client = {
+  id: number;
+  name: string;
+  email: string;
+};
+
+type Payment = {
+  id: number;
+  jobId: number;
+  clientId: number;
+  freelancerId: number;
+  amount: number;
+  mpesaCode: string | null;
+  status: string;
+  confirmedByAdmin: boolean;
+  confirmedAt: string | null;
+  createdAt: string;
+};
+
+type JobMessage = {
+  id: number;
+  jobId: number;
+  senderId: number;
+  message: string;
+  adminApproved: boolean;
+  createdAt: string;
+};
+
+const FinancialsSkeleton = () => (
+  <Card className="border-dashed border-primary/40 bg-primary/5 dark:border-primary/30">
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+        Loading financial summary…
+      </CardTitle>
+      <CardDescription>Fetching live payout breakdown for this order.</CardDescription>
+    </CardHeader>
+    <CardContent className="space-y-3">
+      <div className="h-3 w-3/4 rounded-md bg-muted animate-pulse" />
+      <div className="h-3 w-1/2 rounded-md bg-muted animate-pulse" />
+      <div className="h-3 w-full rounded-md bg-muted animate-pulse" />
+    </CardContent>
+  </Card>
+);
+
+const FileUploadSkeleton = () => (
+  <Card className="border-dashed border-muted-foreground/40 bg-muted/10">
+    <CardHeader className="space-y-1">
+      <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Preparing secure file workspace…
+      </CardTitle>
+      <CardDescription>Loading existing attachments and upload tools.</CardDescription>
+    </CardHeader>
+    <CardContent className="space-y-4">
+      <div className="h-10 rounded-md bg-muted animate-pulse" />
+      <div className="h-24 rounded-md bg-muted animate-pulse" />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="h-12 rounded-md bg-muted animate-pulse" />
+        <div className="h-12 rounded-md bg-muted animate-pulse" />
+      </div>
+    </CardContent>
+  </Card>
+);
+
+const ChatSkeleton = () => (
+  <Card className="h-[420px] flex items-center justify-center border-dashed border-muted-foreground/40">
+    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+      <Loader2 className="h-5 w-5 animate-spin" />
+      <span>Connecting to conversation…</span>
+    </div>
+  </Card>
+);
+
+const OrderFinancialsCard = dynamic<typeof import('@/components/OrderFinancialsCard').default>(
+  () => import('@/components/OrderFinancialsCard'),
+  {
+    ssr: false,
+    loading: FinancialsSkeleton,
+  }
+);
+
+const FileUploadSection = dynamic<typeof import('@/components/file-upload-section').FileUploadSection>(
+  () => import('@/components/file-upload-section').then((mod) => mod.FileUploadSection),
+  {
+    ssr: false,
+    loading: FileUploadSkeleton,
+  }
+);
+
+const OrderChat = dynamic<typeof import('@/components/order-chat').OrderChat>(
+  () => import('@/components/order-chat').then((mod) => mod.OrderChat),
+  {
+    ssr: false,
+    loading: ChatSkeleton,
+  }
+);
+
+export default function ManagerOrderDetailPage() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+  const params = useParams();
+  const jobId = params.id as string;
+
+  const [job, setJob] = useState<Job | null>(null);
+  const [client, setClient] = useState<Client | null>(null);
+  const [freelancers, setFreelancers] = useState<Freelancer[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [payment, setPayment] = useState<Payment | null>(null);
+  const [messages, setMessages] = useState<JobMessage[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [loadingData, setLoadingData] = useState(true);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [selectedFreelancer, setSelectedFreelancer] = useState<string>('');
+  const [processing, setProcessing] = useState(false);
+  const [directMessageDialogOpen, setDirectMessageDialogOpen] = useState(false);
+  const [directMessageRecipient, setDirectMessageRecipient] = useState<'client' | 'freelancer'>('client');
+  const [directMessageContent, setDirectMessageContent] = useState('');
+  const [sendingDirectMessage, setSendingDirectMessage] = useState(false);
+  const [managerSelectedFiles, setManagerSelectedFiles] = useState<File[]>([]);
+  const [managerUploading, setManagerUploading] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const managerFileInputRef = useRef<HTMLInputElement>(null);
+  const [revisionDialogOpen, setRevisionDialogOpen] = useState(false);
+  const [revisionFile, setRevisionFile] = useState<File | null>(null);
+  const [revisionNotes, setRevisionNotes] = useState('');
+  const [pendingMessagesForApproval, setPendingMessagesForApproval] = useState<JobMessage[]>([]);
+  const [pendingUploadsForApproval, setPendingUploadsForApproval] = useState<Attachment[]>([]);
+  
+  // Internal revision management
+  const [internalRevisions, setInternalRevisions] = useState<any[]>([]);
+  const [internalRevisionDialogOpen, setInternalRevisionDialogOpen] = useState(false);
+  const [internalRevisionText, setInternalRevisionText] = useState('');
+  const [internalRevisionManagementOpen, setInternalRevisionManagementOpen] = useState(false);
+  const [selectedRevisionId, setSelectedRevisionId] = useState<number | null>(null);
+  const [revisionAction, setRevisionAction] = useState<'complete' | 'return'>('complete');
+  const [revisionManagementNotes, setRevisionManagementNotes] = useState('');
+
+  // Fine/Bonus dialogs
+  const [fineDialogOpen, setFineDialogOpen] = useState(false);
+  const [fineAmount, setFineAmount] = useState('');
+  const [fineReason, setFineReason] = useState('');
+  const [fineType, setFineType] = useState<'client_complaint' | 'late_delivery' | 'quality_issue' | 'policy_violation' | 'other'>('other');
+  const [bonusDialogOpen, setBonusDialogOpen] = useState(false);
+  const [bonusAmount, setBonusAmount] = useState('');
+  const [bonusReason, setBonusReason] = useState('');
+
+  // Editor assignment state
+  const [editors, setEditors] = useState<{ id: number; name: string; email: string; rating: number | null; completedJobs: number }[]>([]);
+  const [editorAssignments, setEditorAssignments] = useState<any[]>([]);
+  const [editorDialogOpen, setEditorDialogOpen] = useState(false);
+  const [selectedEditor, setSelectedEditor] = useState<string>('');
+
+  // Direct fetch similar to admin page instead of relying solely on useOrderData hook
+  const fetchJobDetails = useCallback(async () => {
+    if (!jobId || !user) return;
+    
+    setLoadingData(true);
+    try {
+      const response = await fetch(`/api/v2/orders/${jobId}`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          toast.error('Order not found');
+          router.push('/manager/orders/all');
+          return;
+        }
+        throw new Error(`Failed to fetch order: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Map v2 response to manager page types
+      const mappedJob: Job = {
+        id: data.order.id,
+        displayId: data.order.displayId || data.order.orderNumber,
+        orderNumber: data.order.orderNumber,
+        clientId: data.client?.id || 0,
+        title: data.order.title,
+        instructions: data.order.instructions || '',
+        workType: data.order.workType || 'standard',
+        pages: data.order.pages,
+        slides: data.order.slides,
+        amount: data.order.amount || 0,
+        deadline: data.order.deadline || '',
+        actualDeadline: data.order.actualDeadline || data.order.deadline || '',
+        freelancerDeadline: data.order.freelancerDeadline || data.order.actualDeadline || data.order.deadline || '',
+        status: data.order.status,
+        assignedFreelancerId: data.order.assignedFreelancerId || null,
+        adminApproved: data.order.adminApproved || false,
+        clientApproved: data.order.clientApproved || false,
+        revisionRequested: data.order.revisionRequested || false,
+        revisionNotes: data.order.revisionNotes || null,
+        paymentConfirmed: data.order.paymentConfirmed || false,
+        createdAt: data.order.createdAt || new Date().toISOString(),
+        client: data.client ? { 
+          id: data.client.id, 
+          displayId: data.client.displayId,
+          name: data.client.name 
+        } : undefined,
+        writer: data.writer ? { 
+          id: data.writer.id, 
+          displayId: data.writer.displayId,
+          name: data.writer.name 
+        } : undefined,
+      };
+      
+      setJob(mappedJob);
+      
+      if (data.client) {
+        setClient({
+          id: data.client.id,
+          name: data.client.name,
+          email: data.client.email || '',
+        });
+      }
+      
+      if (data.files && Array.isArray(data.files)) {
+        const mappedFiles = data.files.map((f: any) => ({
+          id: f.id,
+          jobId: Number(jobId),
+          uploadedBy: f.uploadedBy,
+          fileName: f.fileName,
+          fileUrl: f.fileUrl,
+          fileSize: f.fileSize,
+          fileType: f.fileType || 'application/octet-stream',
+          uploadType: f.uploadType || 'additional',
+          uploaderRole: f.uploaderRole || undefined,
+          createdAt: f.uploadedAt || f.createdAt,
+          notes: f.notes ?? null,
+        }));
+        setAttachments(mappedFiles);
+      }
+      
+      if (data.messages && Array.isArray(data.messages)) {
+        setMessages(data.messages);
+        setPendingMessagesForApproval(data.messages.filter((m: any) => !m.adminApproved));
+      }
+      
+      // Fetch payments separately
+      const paymentsRes = await fetch(`/api/payments?jobId=${data.order.id}`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      
+      if (paymentsRes.ok) {
+        const paymentsData = await paymentsRes.json();
+        const payments = Array.isArray(paymentsData) ? paymentsData : (paymentsData.payments || []);
+        if (payments.length > 0) {
+          setPayment(payments[0]);
+        }
+      }
+      
+    } catch (error) {
+      console.error('Failed to fetch order details:', error);
+      toast.error('Failed to load order details');
+      router.push('/manager/orders/all');
+    } finally {
+      setLoadingData(false);
+    }
+  }, [jobId, user, router]);
+
+  // Download function with comprehensive error handling
+  const handleDownloadAttachment = async (attachment: Attachment) => {
+    try {
+      const response = await fetch(attachment.fileUrl);
+      if (!response.ok) throw new Error('Download failed');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = attachment.fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast.success('File downloaded successfully');
+    } catch (error) {
+      console.error('Download failed:', error);
+      toast.error('Failed to download file');
+    }
+  };
+
+  // Bulk download function for multiple files
+  const handleDownloadAll = async (attachmentsList: Attachment[]) => {
+    if (attachmentsList.length === 0) {
+      toast.error('No files to download');
+      return;
+    }
+
+    toast.info(`Downloading ${attachmentsList.length} file(s)...`);
+    
+    for (const att of attachmentsList) {
+      await handleDownloadAttachment(att);
+      // Small delay between downloads
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  };
+
+  // Fetch attachments from both V2 (order_files) and legacy (job_attachments) for complete view
+  const fetchAttachmentsMerged = useCallback(async () => {
+    if (!jobId || !user) return;
+    try {
+      const [v2Res, legacyRes] = await Promise.all([
+        fetch(`/api/v2/orders/${jobId}/files?role=manager&userId=${user.id}&includeDrafts=true`, {
+          credentials: 'include',
+          cache: 'no-store',
+        }),
+        fetch(`/api/jobs/${jobId}/attachments`, {
+          credentials: 'include',
+          cache: 'no-store',
+        }),
+      ]);
+
+      let merged: Attachment[] = [];
+
+      if (v2Res.ok) {
+        const data = await v2Res.json();
+        const files = (data?.files || []).map((f: any) => ({
+          id: f.id,
+          jobId: Number(jobId),
+          uploadedBy: f.uploadedBy,
+          fileName: f.fileName,
+          fileUrl: f.fileUrl,
+          fileSize: f.fileSize,
+          fileType: f.fileType || 'application/octet-stream',
+          uploadType: f.uploadType || 'additional',
+          uploaderRole: f.uploaderRole || undefined,
+          createdAt: f.uploadedAt || f.createdAt,
+          notes: f.notes ?? null,
+        })) as Attachment[];
+        merged = merged.concat(files);
+      }
+
+      if (legacyRes.ok) {
+        const legacy = await legacyRes.json();
+        const legacyFiles = (legacy || []).map((f: any) => ({
+          id: f.id,
+          jobId: Number(jobId),
+          uploadedBy: f.uploadedBy,
+          fileName: f.fileName,
+          fileUrl: f.fileUrl,
+          fileSize: f.fileSize,
+          fileType: f.fileType || 'application/octet-stream',
+          uploadType: f.uploadType || 'initial',
+          uploaderRole: f.uploaderRole || undefined,
+          createdAt: f.createdAt,
+          notes: null,
+        })) as Attachment[];
+        merged = merged.concat(legacyFiles);
+      }
+
+      setAttachments(merged);
+      setPendingUploadsForApproval([]);
+    } catch (error) {
+      console.error('Failed to fetch attachments:', error);
+    }
+  }, [jobId, user]);
+
+  const fetchFreelancers = useCallback(async () => {
+    try {
+      const response = await fetch('/api/users?role=freelancer&approved=true', {
+        credentials: 'include',
+        cache: 'no-store',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('bearer_token') || ''}`,
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setFreelancers(data);
+      } else {
+        console.error('Failed to fetch freelancers - status:', response.status);
+        toast.error('Failed to load freelancers list');
+      }
+    } catch (error) {
+      console.error('Failed to fetch freelancers:', error);
+      toast.error('Error loading freelancers');
+    }
+  }, [user?.id]);
+
+  // Fetch available editors for assignment
+  const fetchEditors = useCallback(async () => {
+    try {
+      const response = await fetch('/api/v2/editors', {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setEditors(data.editors || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch editors:', error);
+    }
+  }, []);
+
+  // Fetch current editor assignments for this order
+  const fetchEditorAssignments = useCallback(async () => {
+    if (!jobId) return;
+    
+    try {
+      const response = await fetch(`/api/v2/orders/${jobId}/assign-editor`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setEditorAssignments(data.assignments || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch editor assignments:', error);
+    }
+  }, [jobId]);
+
+  // Handle assigning an editor to the order
+  const handleAssignEditor = async () => {
+    if (!selectedEditor || !job) return;
+    setProcessing(true);
+
+    try {
+      const response = await fetch(`/api/v2/orders/${job.id}/assign-editor`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ editorId: parseInt(selectedEditor) }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast.success(data.message || 'Editor assigned successfully');
+        setEditorDialogOpen(false);
+        setSelectedEditor('');
+        fetchEditorAssignments();
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Failed to assign editor');
+      }
+    } catch (error) {
+      console.error('Failed to assign editor:', error);
+      toast.error('Failed to assign editor');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Handle removing an editor assignment
+  const handleRemoveEditor = async (editorId: number) => {
+    if (!job) return;
+    setProcessing(true);
+
+    try {
+      const response = await fetch(`/api/v2/orders/${job.id}/assign-editor?editorId=${editorId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        toast.success('Editor removed from order');
+        fetchEditorAssignments();
+      } else {
+        toast.error('Failed to remove editor');
+      }
+    } catch (error) {
+      console.error('Failed to remove editor:', error);
+      toast.error('Failed to remove editor');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!loading && user && user.role === 'manager') {
+      fetchJobDetails();
+      fetchFreelancers();
+      fetchAttachmentsMerged();
+      fetchEditors();
+      fetchEditorAssignments();
+    } else if (!loading && (!user || user.role !== 'manager')) {
+      router.push('/');
+    }
+  }, [user, loading, router, fetchJobDetails, fetchFreelancers, fetchAttachmentsMerged, fetchEditors, fetchEditorAssignments]);
+
+  // 🔄 Light real-time refresh - poll for updates every 8 seconds
+  useEffect(() => {
+    if (!jobId || !user || user.role !== 'manager') return;
+    
+    const interval = setInterval(() => {
+      fetchJobDetails();
+      fetchAttachmentsMerged();
+    }, 8000);
+    
+    return () => clearInterval(interval);
+  }, [jobId, user, fetchJobDetails, fetchAttachmentsMerged]);
+
+  const handleManagerFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const totalFiles = managerSelectedFiles.length + files.length;
+    
+    if (totalFiles > 10) {
+      toast.error('Maximum 10 files allowed');
+      return;
+    }
+    
+    setManagerSelectedFiles(prev => [...prev, ...files]);
+    toast.success(`${files.length} file(s) selected`);
+  };
+
+  const handleManagerRemoveFile = (index: number) => {
+    setManagerSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleManagerDirectUpload = async () => {
+    if (managerSelectedFiles.length === 0) {
+      toast.error('Please select files to upload');
+      return;
+    }
+
+    setManagerUploading(true);
+
+    try {
+      for (const file of managerSelectedFiles) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // Use the v2 admin-upload endpoint which handles Cloudinary upload internally
+        const uploadResponse = await fetch(`/api/v2/orders/${jobId}/admin-upload`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json();
+          throw new Error(errorData.error || `Failed to upload ${file.name}`);
+        }
+
+        const uploadData = await uploadResponse.json();
+      }
+
+      setManagerSelectedFiles([]);
+      if (managerFileInputRef.current) {
+        managerFileInputRef.current.value = '';
+      }
+
+      toast.success('Files uploaded successfully!');
+      await fetchJobDetails();
+    } catch (error) {
+      console.error('Failed to upload files:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to upload files. Please try again.');
+    } finally {
+      setManagerUploading(false);
+    }
+  };
+
+  const handleAssign = async () => {
+    if (!job || !selectedFreelancer || !user) return;
+
+    const writerId = Number.parseInt(selectedFreelancer, 10);
+    if (Number.isNaN(writerId)) {
+      toast.error('Invalid freelancer selection');
+      return;
+    }
+
+    setProcessing(true);
+
+    try {
+      // 🔴 FIX: Use v2 endpoint that validates manager assignment and credits manager fee
+      const response = await fetch(`/api/v2/orders/${job.id}/assign`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          freelancerId: writerId,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAssignDialogOpen(false);
+        setSelectedFreelancer('');
+        toast.success(data.message || 'Freelancer assigned successfully!');
+        await fetchJobDetails();
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        toast.error(errorData.error || 'Failed to assign freelancer');
+        console.error('Assignment failed:', errorData);
+      }
+    } catch (error) {
+      console.error('Failed to assign job:', error);
+      toast.error('Failed to assign freelancer. Please try again.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleUnassign = async () => {
+    if (!job) return;
+    setProcessing(true);
+
+    try {
+      const response = await fetch(`/api/jobs/${job.id}/assign`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ freelancerId: null }),
+      });
+
+      if (response.ok) {
+        toast.success('Freelancer unassigned successfully!');
+        await fetchJobDetails();
+      } else {
+        toast.error('Failed to unassign freelancer');
+      }
+    } catch (error) {
+      console.error('Failed to unassign job:', error);
+      toast.error('Failed to unassign freelancer');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleDeliverToClient = async () => {
+    if (!job || !user) return;
+    setProcessing(true);
+
+    try {
+      // 🔴 FIX: Use manager deliver endpoint that validates manager-client assignment
+      const response = await fetch(`/api/v2/orders/${job.id}/admin/deliver`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          notes: 'Work delivered to client by manager',
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const deliveryFee = data.order?.managerDeliveryFee || data.managerDeliveryFee || 0;
+        const baseMessage = data.message || 'Work delivered to client!';
+        const suffix = deliveryFee ? ` Manager delivery fee: KSh ${deliveryFee}` : '';
+        toast.success(`${baseMessage}${suffix}`);
+        await fetchJobDetails();
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        toast.error(errorData.error || 'Failed to deliver work');
+        console.error('Deliver failed:', errorData);
+      }
+    } catch (error) {
+      console.error('Failed to deliver work:', error);
+      toast.error('Failed to deliver work. Please try again.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleApprovePayment = async () => {
+    if (!payment || !job) return;
+    setProcessing(true);
+
+    try {
+      const response = await fetch(`/api/payments/${payment.id}/confirm`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ confirmed: true }),
+      });
+
+      if (response.ok) {
+        toast.success('Payment approved!');
+        await fetchJobDetails();
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Failed to approve payment');
+      }
+    } catch (error) {
+      console.error('Failed to approve payment:', error);
+      toast.error('Failed to approve payment');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleAccept = async () => {
+    if (!job || !user) return;
+    setProcessing(true);
+    try {
+      // 🔴 FIX: Use v2 endpoint that validates manager-client assignment
+      const response = await fetch(`/api/v2/orders/${job.id}/accept`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        toast.success(data.message || 'Order accepted! Ready for freelancer assignment.');
+        await fetchJobDetails();
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        toast.error(errorData.error || 'Failed to accept order');
+        console.error('Accept order failed:', errorData);
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to accept order. Please try again.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!job) return;
+    setProcessing(true);
+    try {
+      const response = await fetch(`/api/jobs/${job.id}/status`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'cancelled', changedBy: user?.id }),
+      });
+      if (response.ok) {
+        toast.success('Order rejected');
+        await fetchJobDetails();
+      } else {
+        toast.error('Failed to reject order');
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to reject order');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handlePutOnHold = async () => {
+    if (!job) return;
+    setProcessing(true);
+    try {
+      const response = await fetch(`/api/jobs/${job.id}/status`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'on_hold' }),
+      });
+      if (response.ok) {
+        toast.success('Order put on hold');
+        await fetchJobDetails();
+      } else {
+        toast.error('Failed to put order on hold');
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to put order on hold');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleResumeOrder = async () => {
+    if (!job || !user) return;
+    setProcessing(true);
+    try {
+      const response = await fetch(`/api/jobs/${job.id}/resume`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          managerId: user.id,
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        toast.success(data.message || 'Order resumed successfully!');
+        await fetchJobDetails();
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        toast.error(errorData.error || 'Failed to resume order');
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to resume order');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleSubmitRevision = async () => {
+    if (!job || !revisionFile) {
+      toast.error('Please select a file to upload');
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', revisionFile);
+      formData.append('jobId', job.id.toString());
+      formData.append('folder', 'tasklynk/uploads');
+      
+      const cloudinaryResponse = await fetch('/api/cloudinary/upload', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include', // 🔴 CRITICAL: Include auth cookies
+      });
+
+      if (!cloudinaryResponse.ok) {
+        const errorData = await cloudinaryResponse.json();
+        toast.error(errorData.error || 'Failed to upload file');
+        setProcessing(false);
+        return;
+      }
+
+      const cloudinaryData = await cloudinaryResponse.json();
+
+      const response = await fetch(`/api/jobs/${job.id}/attachments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: revisionFile.name,
+          fileUrl: cloudinaryData.url,
+          fileSize: revisionFile.size,
+          fileType: revisionFile.type,
+          uploadType: 'revision',
+          uploadedBy: user?.id || 0,
+          uploaderRole: 'manager',
+        }),
+      });
+
+      if (response.ok) {
+        setRevisionDialogOpen(false);
+        setRevisionFile(null);
+        setRevisionNotes('');
+        toast.success('Revision submitted successfully!');
+        await fetchJobDetails();
+      } else {
+        const data = await response.json();
+        toast.error(data.error || 'Failed to save revision metadata');
+      }
+    } catch (error) {
+      console.error('Failed to submit revision:', error);
+      toast.error('Failed to submit revision');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!job) return;
+    setProcessing(true);
+
+    try {
+      const response = await fetch(`/api/jobs/${job.id}/status`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'cancelled', changedBy: user?.id }),
+      });
+
+      if (response.ok) {
+        toast.success('Order cancelled successfully');
+        await fetchJobDetails();
+      } else {
+        toast.error('Failed to cancel order');
+      }
+    } catch (error) {
+      console.error('Failed to cancel job:', error);
+      toast.error('Failed to cancel order');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleApproveOnBehalfOfClient = async () => {
+    if (!job) return;
+    
+    // Confirm action
+    if (!confirm('Are you sure you want to approve this order on behalf of the client? This will update the order status.')) {
+      return;
+    }
+
+    setProcessing(true);
+
+    try {
+      // Use status change endpoint
+      const response = await fetch(`/api/jobs/${job.id}/status`, {
+        method: 'PATCH',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          status: 'approved',
+          clientApproved: true,
+          changedBy: user?.id,
+        }),
+      });
+
+      if (response.ok) {
+        toast.success('Order approved on behalf of client! Note: For full financial processing, client should approve via their interface.');
+        await fetchJobDetails();
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        toast.error(errorData.error || 'Failed to approve order');
+        console.error('Approve failed:', errorData);
+      }
+    } catch (error) {
+      console.error('Failed to approve:', error);
+      toast.error('Failed to approve order');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleRequestClientRevision = async () => {
+    if (!job) return;
+    
+    const reason = prompt('Please describe what needs to be revised:');
+    if (!reason?.trim()) {
+      toast.error('Revision reason is required');
+      return;
+    }
+
+    setProcessing(true);
+
+    try {
+      const response = await fetch(`/api/v2/orders/${job.id}/request-revision`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          clientId: job.clientId,
+          revisionNotes: reason.trim(),
+        }),
+      });
+
+      if (response.ok) {
+        toast.success('Client revision requested. Freelancer will be notified.');
+        await fetchJobDetails();
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Failed to request revision');
+      }
+    } catch (error) {
+      console.error('Failed to request revision:', error);
+      toast.error('Failed to request revision');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim()) return;
+    
+    setProcessing(true);
+    try {
+      const response = await fetch(`/api/v2/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          orderId: parseInt(jobId),
+          senderId: user?.id,
+          message: newMessage,
+        }),
+      });
+
+      if (response.ok) {
+        setNewMessage('');
+        toast.success('Message sent!');
+        await fetchJobDetails();
+      } else {
+        toast.error('Failed to send message');
+      }
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      toast.error('Failed to send message');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleDeliverMessage = async (messageId: number) => {
+    setProcessing(true);
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/messages/${messageId}/deliver`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        toast.success('Message delivered successfully!');
+        await fetchJobDetails();
+      } else {
+        toast.error('Failed to deliver message');
+      }
+    } catch (error) {
+      console.error('Failed to deliver message:', error);
+      toast.error('Failed to deliver message');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleSendDirectMessage = async () => {
+    if (!directMessageContent.trim()) {
+      toast.error('Please enter a message');
+      return;
+    }
+
+    if (!job) return;
+
+    const recipientId = directMessageRecipient === 'client' ? job.clientId : job.assignedFreelancerId;
+    
+    if (!recipientId) {
+      toast.error(`No ${directMessageRecipient} assigned to this order`);
+      return;
+    }
+
+    setSendingDirectMessage(true);
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senderId: user?.id,
+          message: directMessageContent,
+          recipientId: recipientId,
+          autoApprove: true,
+        }),
+      });
+
+      if (response.ok) {
+        toast.success(`Message sent to ${directMessageRecipient} successfully!`);
+        setDirectMessageContent('');
+        setDirectMessageDialogOpen(false);
+        await fetchJobDetails();
+      } else {
+        toast.error('Failed to send message');
+      }
+    } catch (error) {
+      console.error('Failed to send direct message:', error);
+      toast.error('Failed to send message');
+    } finally {
+      setSendingDirectMessage(false);
+    }
+  };
+
+  // ADD: Message approval handler
+  const handleApproveMessage = async (messageId: number) => {
+    setProcessing(true);
+    try {
+      const response = await fetch(`/api/v2/messages/${messageId}/approve`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        toast.success('Message approved and delivered!');
+        await fetchJobDetails();
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Failed to approve message');
+      }
+    } catch (error) {
+      console.error('Failed to approve message:', error);
+      toast.error('Failed to approve message');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const fetchInternalRevisions = async () => {
+    try {
+      const response = await fetch(`/api/v2/orders/${jobId}/revisions/internal`, {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setInternalRevisions(data.revisions || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch internal revisions:', error);
+    }
+  };
+
+  const handleCreateInternalRevision = async () => {
+    if (!job || !internalRevisionText.trim()) {
+      toast.error('Please describe what needs to be revised');
+      return;
+    }
+
+    setProcessing(true);
+
+    try {
+      const response = await fetch(`/api/v2/orders/${job.id}/revisions/internal`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          description: internalRevisionText.trim(),
+          priority: 'medium',
+        }),
+      });
+
+      if (response.ok) {
+        toast.success('Internal QC revision created. Freelancer notified.');
+        setInternalRevisionDialogOpen(false);
+        setInternalRevisionText('');
+        await fetchJobDetails();
+        fetchInternalRevisions();
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Failed to create revision');
+      }
+    } catch (error) {
+      console.error('Failed to create internal revision:', error);
+      toast.error('Failed to create internal revision');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleCompleteInternalRevision = async (revisionId: number) => {
+    if (!job) return;
+    setProcessing(true);
+
+    try {
+      const response = await fetch(`/api/v2/internal-revisions/${revisionId}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'accept',
+          reviewNotes: revisionManagementNotes.trim() || 'Internal revision completed',
+        }),
+      });
+
+      if (response.ok) {
+        toast.success('Internal revision completed');
+        setInternalRevisionManagementOpen(false);
+        setSelectedRevisionId(null);
+        setRevisionManagementNotes('');
+        await fetchJobDetails();
+        fetchInternalRevisions();
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Failed to complete revision');
+      }
+    } catch (error) {
+      console.error('Failed to complete revision:', error);
+      toast.error('Failed to complete revision');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleReturnInternalRevision = async (revisionId: number) => {
+    if (!job || !revisionManagementNotes.trim()) {
+      toast.error('Please provide notes for returning the revision');
+      return;
+    }
+    setProcessing(true);
+
+    try {
+      const response = await fetch(`/api/v2/internal-revisions/${revisionId}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'request_more',
+          additionalChanges: revisionManagementNotes.trim(),
+        }),
+      });
+
+      if (response.ok) {
+        toast.success('Revision returned to freelancer');
+        setInternalRevisionManagementOpen(false);
+        setSelectedRevisionId(null);
+        setRevisionManagementNotes('');
+        await fetchJobDetails();
+        fetchInternalRevisions();
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Failed to return revision');
+      }
+    } catch (error) {
+      console.error('Failed to return revision:', error);
+      toast.error('Failed to return revision');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleIssueFine = async () => {
+    if (!job || !fineAmount || !fineReason.trim()) {
+      toast.error('Please provide amount and reason');
+      return;
+    }
+
+    const amount = parseFloat(fineAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
+
+    setProcessing(true);
+
+    try {
+      const targetUserId = job.assignedFreelancerId || job.clientId;
+      if (!targetUserId) {
+        toast.error('No user found to apply fine');
+        return;
+      }
+
+      const response = await fetch('/api/v2/admin/fines', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          userId: targetUserId,
+          fineAmount: amount,
+          fineType: fineType,
+          reason: fineReason.trim(),
+          jobId: job.id,
+        }),
+      });
+
+      if (response.ok) {
+        toast.success(`Fine of KSh ${amount.toFixed(2)} applied successfully`);
+        setFineDialogOpen(false);
+        setFineAmount('');
+        setFineReason('');
+        setFineType('other');
+        await fetchJobDetails();
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Failed to apply fine');
+      }
+    } catch (error) {
+      console.error('Failed to apply fine:', error);
+      toast.error('Failed to apply fine');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleIssueBonus = async () => {
+    if (!job || !bonusAmount || !bonusReason.trim()) {
+      toast.error('Please provide amount and reason');
+      return;
+    }
+
+    const amount = parseFloat(bonusAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
+
+    setProcessing(true);
+
+    try {
+      const response = await fetch(`/api/jobs/${job.id}/adjustments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          changeType: 'client_bonus',
+          amount: amount,
+          notes: bonusReason.trim(),
+        }),
+      });
+
+      if (response.ok) {
+        toast.success(`Bonus of KSh ${amount.toFixed(2)} applied successfully`);
+        setBonusDialogOpen(false);
+        setBonusAmount('');
+        setBonusReason('');
+        await fetchJobDetails();
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Failed to apply bonus');
+      }
+    } catch (error) {
+      console.error('Failed to apply bonus:', error);
+      toast.error('Failed to apply bonus');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  if (loading || loadingData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!user || user.role !== 'manager') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <p className="text-muted-foreground">Unauthorized access</p>
+          <Link href="/manager/dashboard">
+            <Button className="mt-4">Back to Dashboard</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!job) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <p className="text-muted-foreground">Order not found</p>
+          <Link href="/manager/orders/all">
+            <Button className="mt-4">Back to Orders</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const assignedFreelancer = job.writer ? {
+    id: job.writer.id,
+    name: job.writer.name,
+    email: '',
+    rating: null,
+    balance: 0,
+    completedJobs: 0  // Will be fetched from freelancers list if available
+  } : freelancers.find(f => f.id === job.assignedFreelancerId);
+
+  // Calculate freelancer amount with their CPP tier
+  const freelancerCompletedJobs = assignedFreelancer?.completedJobs ?? 0;
+  const freelancerAmount = calculateWriterEarningsByCPPLevel(job.pages, job.slides, job.workType, freelancerCompletedJobs);
+  const pendingMessages = (messages || []).filter(m => !m.adminApproved);
+  const deliveredMessages = (messages || []).filter(m => m.adminApproved);
+
+  const writerUploads = (attachments || []).filter(att => att.uploaderRole === 'freelancer');
+  const managerFinalUploads = (attachments || []).filter(att => att.uploadType === 'final' && att.uploaderRole === 'manager');
+  const clientUploads = attachments.filter(att => att.uploadType === 'initial' || att.uploaderRole === 'client' || att.uploaderRole === 'account_owner');
+
+  return (
+    <>
+      <div className="order-container py-4">
+        <div className="order-header">
+          <Link 
+            href="/manager/orders/all"
+            className="inline-flex items-center text-sm text-muted-foreground hover:text-primary transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4 mr-1" />
+            Back to Orders
+          </Link>
+        </div>
+
+        <div className="">
+          <div className="mb-4">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-3">
+              <div className="flex-1">
+                <h1 className="order-title mb-1">{job.title}</h1>
+                <div className="order-meta">
+                  <span>Posted {format(new Date(job.createdAt), 'MMM dd, yyyy')}</span>
+                  {job.displayId && (
+                    <Badge variant="outline" className="order-badge font-mono">
+                      {job.displayId}
+                    </Badge>
+                  )}
+                  {client && (
+                    <Badge variant="default" className="order-badge bg-blue-600 hover:bg-blue-700 text-white">
+                      Client: {client.name}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              <Badge
+                variant="secondary"
+                className="capitalize px-3 py-1.5 bg-purple-100 text-purple-900 dark:bg-purple-900 dark:text-purple-100 border border-purple-300 dark:border-purple-700"
+              >
+                {job.status === 'editing' ? 'Under Review' : 
+                 job.status === 'revision_pending' ? 'Revision Pending' :
+                 job.status.replace('_', ' ')}
+              </Badge>
+            </div>
+          </div>
+
+          {(job.actualDeadline || job.freelancerDeadline) && (
+            <div className="mb-3 grid md:grid-cols-2 gap-3">
+              {job.actualDeadline && (
+                <Card className="border rounded-lg">
+                  <CardContent className="pt-2.5 pb-2.5">
+                    <div className="space-y-1.5">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Client's Deadline</Label>
+                        <p className="font-medium text-sm">{format(new Date(job.actualDeadline), 'MMM dd, yyyy HH:mm')}</p>
+                      </div>
+                      <CountdownTimer 
+                        deadline={job.actualDeadline} 
+                        colorScheme="purple" 
+                        label="Client" 
+                        status={job.status}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              {job.freelancerDeadline && (
+                <Card className="border rounded-lg">
+                  <CardContent className="pt-2.5 pb-2.5">
+                    <div className="space-y-1.5">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Freelancer's Deadline</Label>
+                        <p className="font-medium text-sm">{format(new Date(job.freelancerDeadline), 'MMM dd, yyyy HH:mm')}</p>
+                      </div>
+                      <CountdownTimer 
+                        deadline={job.freelancerDeadline} 
+                        colorScheme="green" 
+                        label="Writer" 
+                        status={job.status}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* FINANCIALS CARD */}
+          <div className="mb-4">
+            <OrderFinancialsCard orderId={parseInt(jobId)} userRole="manager" variant="full" />
+          </div>
+
+          {job.status === 'approved' && payment && !payment.confirmedByAdmin && payment.status === 'pending' && (
+            <Alert className="mb-4 border-green-500 bg-green-50 dark:bg-green-900/10">
+              <Wallet className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-sm text-green-800 dark:text-green-200">
+                <strong>Payment Pending:</strong> Client has submitted payment. Review and approve to complete the order.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {payment && job.status === 'approved' && (
+            <Card className="mb-4 border-2 border-primary/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Wallet className="w-4 h-4" />
+                  Payment Information
+                </CardTitle>
+                <CardDescription className="text-sm">
+                  Review payment details before approval
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid md:grid-cols-3 gap-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Payment Amount</Label>
+                    <p className="font-semibold text-base text-green-600">KSh {payment.amount.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">M-Pesa Code</Label>
+                    <p className="font-medium text-sm font-mono">{payment.mpesaCode || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Writer Payout</Label>
+                    <p className="font-semibold text-base text-blue-600">KSh {freelancerAmount.toFixed(2)}</p>
+                  </div>
+                </div>
+
+                {!payment.confirmedByAdmin && payment.status === 'pending' && (
+                  <div className="flex gap-2 pt-2">
+                    <Button onClick={handleApprovePayment} disabled={processing} className="bg-green-600 hover:bg-green-700">
+                      <CheckCircle className="w-4 h-4 mr-1.5" />
+                      Approve Payment
+                    </Button>
+                  </div>
+                )}
+
+                {payment.confirmedByAdmin && (
+                  <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                    <CheckCircle className="w-5 h-5 text-green-600" />
+                    <div>
+                      <p className="font-medium text-sm text-green-900 dark:text-green-100">Payment Confirmed</p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ADD: Pending Messages Alert */}
+          {pendingMessagesForApproval.length > 0 && (
+            <Alert className="mb-4 border-amber-500 bg-amber-50 dark:bg-amber-900/10">
+              <AlertCircle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-sm text-amber-800 dark:text-amber-200">
+                <strong>{pendingMessagesForApproval.length} message(s)</strong> pending your approval.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <Card className="mb-4">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Order Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid md:grid-cols-3 gap-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Work Type</Label>
+                  <p className="font-medium text-sm capitalize">{job.workType}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Client Amount</Label>
+                  <p className="font-semibold text-base text-green-600">KSh {job.amount.toFixed(2)}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Writer Payout</Label>
+                  <p className="font-semibold text-base text-blue-600">KSh {freelancerAmount.toFixed(2)}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Pages</Label>
+                  <p className="font-medium text-sm">{job.pages || '-'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Slides</Label>
+                  <p className="font-medium text-sm">{job.slides || '-'}</p>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-sm text-muted-foreground font-semibold">Instructions</Label>
+                <div className="mt-2 p-3 bg-muted rounded-lg">
+                  <p className="text-sm whitespace-pre-wrap">{job.instructions}</p>
+                </div>
+              </div>
+
+              {assignedFreelancer && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">Assigned Freelancer</Label>
+                  <div className="mt-2 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold text-sm">
+                      {assignedFreelancer.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{assignedFreelancer.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {assignedFreelancer.rating ? `★ ${assignedFreelancer.rating.toFixed(1)} rating` : 'No rating yet'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ADD: Pending Messages Card */}
+          {pendingMessagesForApproval.length > 0 && (
+            <Card className="mb-4 border-amber-500">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4" />
+                  Messages Pending Approval ({pendingMessagesForApproval.length})
+                </CardTitle>
+                <CardDescription className="text-sm">
+                  Review and approve messages before they're delivered
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {pendingMessagesForApproval.map((msg) => (
+                  <div key={msg.id} className="p-3 bg-muted rounded-lg border border-amber-200 dark:border-amber-800">
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge variant="outline" className="text-xs">
+                            From: {msg.senderId === job.clientId ? 'Client' : msg.senderId === job.assignedFreelancerId ? 'Writer' : 'Manager'}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {format(new Date(msg.createdAt), 'MMM dd, yyyy HH:mm')}
+                          </span>
+                        </div>
+                        <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => handleApproveMessage(msg.id)}
+                        disabled={processing}
+                        className="bg-green-600 hover:bg-green-700 shrink-0"
+                      >
+                        <CheckCircle className="w-4 h-4 mr-1" />
+                        Approve
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Delivery Section - Files to send to client */}
+          <Card className="mb-4 border-2 border-green-500/20">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2 text-green-600">
+                    <FileCheck className="w-4 h-4" />
+                    Deliver to Client
+                  </CardTitle>
+                  <CardDescription className="text-sm">
+                    Upload files to deliver to client. These will show as "from freelancer" on client side.
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="text-xs">Delivery Files</Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <FileUploadSection
+                jobId={parseInt(jobId)}
+                currentUserId={user?.id || 0}
+                currentUserRole="manager"
+                files={attachments.filter(f => f.notes?.includes('[DELIVERY]')).map(f => ({
+                  id: f.id,
+                  fileName: f.fileName,
+                  fileUrl: f.fileUrl,
+                  fileSize: f.fileSize,
+                  fileType: f.fileType,
+                  uploadType: 'delivery',
+                  uploadedBy: f.uploadedBy,
+                  uploaderName: f.uploaderRole || '',
+                  uploaderRole: f.uploaderRole || '',
+                  createdAt: f.createdAt,
+                }))}
+                canUpload={true}
+                canDownload={true}
+                uploadType="delivery"
+                onFileUploaded={() => { fetchJobDetails(); fetchAttachmentsMerged(); }}
+                clientId={job.clientId}
+              />
+            </CardContent>
+          </Card>
+
+          {/* All Attachments Card - Organized by source */}
+          {attachments.length > 0 && (
+            <Card className="mb-4">
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Paperclip className="w-4 h-4" />
+                      Files & Attachments ({attachments.length})
+                    </CardTitle>
+                    <CardDescription className="text-sm">
+                      All files organized by source
+                    </CardDescription>
+                  </div>
+                  {attachments.length > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDownloadAll(attachments)}
+                    >
+                      <Download className="w-4 h-4 mr-1" />
+                      Download All
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Client Uploads - Only show once */}
+                {clientUploads.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold mb-2 text-blue-600">Client Instructions ({clientUploads.length})</h4>
+                    <div className="space-y-2">
+                      {clientUploads.map((att) => (
+                        <div key={att.id} className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/10 rounded border border-blue-200 dark:border-blue-800">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{att.fileName}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatFileSize(att.fileSize)} • {format(new Date(att.createdAt), 'MMM dd, yyyy')}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleDownloadAttachment(att)}
+                          >
+                            <Download className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Freelancer Uploads - Separate section */}
+                {writerUploads.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold mb-2 text-green-600">Freelancer Submissions ({writerUploads.length})</h4>
+                    <div className="space-y-2">
+                      {writerUploads.map((att) => (
+                        <div key={att.id} className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-900/10 rounded border border-green-200 dark:border-green-800">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{att.fileName}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatFileSize(att.fileSize)} • {format(new Date(att.createdAt), 'MMM dd, yyyy')}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleDownloadAttachment(att)}
+                          >
+                            <Download className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Manager File Upload Card - For internal files */}
+          <Card className="mb-4">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileUp className="w-4 h-4" />
+                Upload Internal Files
+              </CardTitle>
+              <CardDescription className="text-sm">
+                Upload files for internal use (not delivered to client). Max 10 files, 40MB each.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Input
+                  type="file"
+                  ref={managerFileInputRef}
+                  onChange={handleManagerFileSelect}
+                  multiple
+                  accept="*/*"
+                  className="mb-2"
+                />
+                {managerSelectedFiles.length > 0 && (
+                  <div className="space-y-2 mt-3">
+                    <Label className="text-sm font-medium">Selected Files ({managerSelectedFiles.length}/10)</Label>
+                    {managerSelectedFiles.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-muted rounded border">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{file.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatFileSize(file.size)}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleManagerRemoveFile(index)}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      onClick={handleManagerDirectUpload}
+                      disabled={managerUploading || managerSelectedFiles.length === 0}
+                      className="w-full"
+                    >
+                      {managerUploading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <FileUp className="w-4 h-4 mr-2" />
+                          Upload Files
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Two-Channel Chat System */}
+          {user && (
+            <div className="mb-4">
+              <OrderChat
+                orderId={parseInt(jobId)}
+                currentUserId={user.id}
+                currentUserRole={user.role}
+                orderClientId={job.clientId}
+                orderFreelancerId={job.assignedFreelancerId}
+              />
+            </div>
+          )}
+
+          <Card className="mb-4">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Manager Actions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {job.status !== 'approved' ? (
+                <div className="flex flex-wrap gap-2">
+                  {job.status === 'pending' && (
+                    <>
+                      <Button onClick={handleAccept} disabled={processing} size="sm">
+                        <CheckCircle className="w-4 h-4 mr-1.5" />
+                        Accept
+                      </Button>
+                      <Button variant="destructive" onClick={handleReject} disabled={processing} size="sm">
+                        <XCircle className="w-4 h-4 mr-1.5" />
+                        Reject
+                      </Button>
+                    </>
+                  )}
+                  
+                  {(job.status === 'assigned' || job.status === 'in_progress') && job.assignedFreelancerId && (
+                    <Button 
+                      variant="outline"
+                      onClick={() => setInternalRevisionDialogOpen(true)}
+                      disabled={processing}
+                      size="sm"
+                      className="border-amber-500 text-amber-600 hover:bg-amber-50"
+                    >
+                      <AlertCircle className="w-4 h-4 mr-1.5" />
+                      Internal Revision
+                    </Button>
+                  )}
+
+                  {job.status === 'editing' && job.assignedFreelancerId && (
+                    <Button 
+                      variant="outline"
+                      onClick={() => setInternalRevisionDialogOpen(true)}
+                      disabled={processing}
+                      size="sm"
+                      className="border-amber-500 text-amber-600 hover:bg-amber-50"
+                    >
+                      <AlertCircle className="w-4 h-4 mr-1.5" />
+                      Internal Revision
+                    </Button>
+                  )}
+
+                  {job.status === 'delivered' && (
+                    <Button 
+                      variant="outline"
+                      onClick={() => setInternalRevisionDialogOpen(true)}
+                      disabled={processing}
+                      size="sm"
+                      className="border-amber-500 text-amber-600 hover:bg-amber-50"
+                    >
+                      <AlertCircle className="w-4 h-4 mr-1.5" />
+                      Internal Revision
+                    </Button>
+                  )}
+
+                  {(job.status === 'accepted' || (job.status === 'assigned' && !job.assignedFreelancerId)) && (
+                    <Button onClick={() => setAssignDialogOpen(true)} disabled={processing} size="sm">
+                      <UserPlus className="w-4 h-4 mr-1.5" />
+                      {job.assignedFreelancerId ? 'Reassign Freelancer' : 'Assign Freelancer'}
+                    </Button>
+                  )}
+
+                  {job.assignedFreelancerId && job.status !== 'completed' && job.status !== 'cancelled' && (
+                    <Button 
+                      variant="outline" 
+                      onClick={handleUnassign} 
+                      disabled={processing} 
+                      size="sm"
+                      className="border-orange-500 text-orange-700 hover:bg-orange-50"
+                    >
+                      <UserX className="w-4 h-4 mr-1.5" />
+                      Unassign Freelancer
+                    </Button>
+                  )}
+
+                  {job.status === 'editing' && (
+                    <Button onClick={handleDeliverToClient} disabled={processing} size="sm">
+                      <Send className="w-4 h-4 mr-1.5" />
+                      Deliver to Client
+                    </Button>
+                  )}
+
+                  {job.status === 'delivered' && (
+                    <>
+                      <Button 
+                        onClick={handleApproveOnBehalfOfClient}
+                        disabled={processing}
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <CheckCircle className="w-4 h-4 mr-1.5" />
+                        Approve (on behalf of client)
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        onClick={handleRequestClientRevision}
+                        disabled={processing}
+                        size="sm"
+                      >
+                        <AlertCircle className="w-4 h-4 mr-1.5" />
+                        Client Revision
+                      </Button>
+                    </>
+                  )}
+
+                  {/* Internal Revision Management - Show when there are open/submitted revisions */}
+                  {internalRevisions.filter(r => r.status === 'submitted' || r.status === 'open').length > 0 && (
+                    <>
+                      {internalRevisions.filter(r => r.status === 'submitted').length > 0 && (
+                        <Button 
+                          variant="outline"
+                          onClick={() => {
+                            const submittedRevision = internalRevisions.find(r => r.status === 'submitted');
+                            if (submittedRevision) {
+                              setSelectedRevisionId(submittedRevision.id);
+                              setRevisionAction('complete');
+                              setInternalRevisionManagementOpen(true);
+                            }
+                          }}
+                          disabled={processing}
+                          size="sm"
+                          className="border-green-500 text-green-600 hover:bg-green-50"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-1.5" />
+                          Complete Internal Revision
+                        </Button>
+                      )}
+                      {internalRevisions.filter(r => r.status === 'submitted').length > 0 && (
+                        <Button 
+                          variant="outline"
+                          onClick={() => {
+                            const submittedRevision = internalRevisions.find(r => r.status === 'submitted');
+                            if (submittedRevision) {
+                              setSelectedRevisionId(submittedRevision.id);
+                              setRevisionAction('return');
+                              setInternalRevisionManagementOpen(true);
+                            }
+                          }}
+                          disabled={processing}
+                          size="sm"
+                          className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                        >
+                          <AlertCircle className="w-4 h-4 mr-1.5" />
+                          Return to Freelancer
+                        </Button>
+                      )}
+                    </>
+                  )}
+
+                  <Button 
+                    variant="outline"
+                    onClick={() => setRevisionDialogOpen(true)} 
+                    disabled={processing}
+                    size="sm"
+                  >
+                    <FileUp className="w-4 h-4 mr-1.5" />
+                    Submit Revision
+                  </Button>
+
+                  {/* Editor Assignment Button */}
+                  {(job.status === 'editing' || job.status === 'in_progress' || job.status === 'assigned') && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setEditorDialogOpen(true)}
+                      disabled={processing}
+                      size="sm"
+                      className="border-purple-500 text-purple-600 hover:bg-purple-50"
+                    >
+                      <FileCheck className="w-4 h-4 mr-1.5" />
+                      {editorAssignments.length > 0 ? 'Manage Editors' : 'Assign Editor'}
+                    </Button>
+                  )}
+
+                  {/* Messaging is now handled by OrderChat component above */}
+
+                  {job.status !== 'completed' && job.status !== 'cancelled' && (
+                    job.status === 'on_hold' ? (
+                      <Button 
+                        size="sm" 
+                        className="bg-green-600 text-white hover:bg-green-700"
+                        onClick={handleResumeOrder}
+                        disabled={processing}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-1.5" />
+                        Resume
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                        onClick={handlePutOnHold}
+                        disabled={processing}
+                      >
+                        <PauseCircle className="w-4 h-4 mr-1.5" />
+                        Put On Hold
+                      </Button>
+                    )
+                  )}
+
+                  {job.status !== 'completed' && job.status !== 'cancelled' && (
+                    <Button variant="destructive" onClick={handleCancel} disabled={processing} size="sm">
+                      <Ban className="w-4 h-4 mr-1.5" />
+                      Cancel Order
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Client approved. Awaiting payment confirmation.</p>
+                  {(job.status === 'approved' || job.status === 'paid') && (
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline"
+                        onClick={() => setFineDialogOpen(true)}
+                        size="sm"
+                        className="border-red-500 text-red-600 hover:bg-red-50"
+                      >
+                        <MinusCircle className="w-4 h-4 mr-1.5" />
+                        Fine
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        onClick={() => setBonusDialogOpen(true)}
+                        size="sm"
+                        className="border-green-500 text-green-600 hover:bg-green-50"
+                      >
+                        <Award className="w-4 h-4 mr-1.5" />
+                        Bonus
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Dialogs remain the same */}
+      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Assign Freelancer</DialogTitle>
+            <DialogDescription>
+              Select a freelancer to assign to this order. View their CPP level and performance stats.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="freelancer">Select Freelancer</Label>
+              <Select value={selectedFreelancer} onValueChange={setSelectedFreelancer}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a freelancer" />
+                </SelectTrigger>
+                <SelectContent className="z-[70]">
+                  {freelancers.map((f) => (
+                    <SelectItem key={f.id} value={f.id.toString()}>
+                      <div className="flex items-center gap-2">
+                        <span>{f.name}</span>
+                        {f.rating && (
+                          <Badge variant="outline" className="text-xs">
+                            ★ {f.rating.toFixed(1)}
+                          </Badge>
+                        )}
+                        {f.completedJobs !== undefined && (
+                          <Badge variant="secondary" className="text-xs">
+                            {f.completedJobs} jobs
+                          </Badge>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Freelancer Info Panel - Shows when a freelancer is selected */}
+            {selectedFreelancer && (
+              <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium text-sm">Freelancer Details</h4>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      // Open writer details dialog if available
+                      const freelancerInfo = freelancers.find(f => f.id.toString() === selectedFreelancer);
+                      if (freelancerInfo) {
+                        window.open(`/manager/writers/all?view=${freelancerInfo.id}`, '_blank');
+                      }
+                    }}
+                  >
+                    <Eye className="w-3 h-3 mr-1" />
+                    Full Profile
+                  </Button>
+                </div>
+                
+                {/* CPP Level Display */}
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground font-medium">CPP Level & Rates:</p>
+                  <FreelancerCPPDisplay 
+                    freelancerId={parseInt(selectedFreelancer)} 
+                    compact={true}
+                    showTier={true}
+                    showRates={true}
+                  />
+                </div>
+
+                {/* Response Stats Display */}
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground font-medium">Assignment Response:</p>
+                  <FreelancerStatsDisplay 
+                    freelancerId={parseInt(selectedFreelancer)} 
+                    compact={true} 
+                  />
+                </div>
+
+                {/* Estimated Payout */}
+                {job && (
+                  <div className="pt-2 border-t">
+                    <p className="text-xs text-muted-foreground">
+                      Estimated payout for this order will be calculated based on their CPP level.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAssign} disabled={!selectedFreelancer || processing}>
+              Assign Freelancer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={directMessageDialogOpen} onOpenChange={setDirectMessageDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="w-5 h-5" />
+              Send Direct Message
+            </DialogTitle>
+            <DialogDescription>
+              Send a message directly to the {directMessageRecipient}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="p-3 bg-muted rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant={directMessageRecipient === 'client' ? 'default' : 'secondary'}>
+                  {directMessageRecipient === 'client' ? 'To: Client' : 'To: Freelancer'}
+                </Badge>
+                <span className="text-sm font-medium">
+                  {directMessageRecipient === 'client' ? client?.name : assignedFreelancer?.name}
+                </span>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="directMessage">Message</Label>
+              <Textarea
+                id="directMessage"
+                placeholder={`Type your message to the ${directMessageRecipient} here...`}
+                value={directMessageContent}
+                onChange={(e) => setDirectMessageContent(e.target.value)}
+                rows={6}
+                className="resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setDirectMessageDialogOpen(false);
+                setDirectMessageContent('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSendDirectMessage} 
+              disabled={sendingDirectMessage || !directMessageContent.trim()}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {sendingDirectMessage ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2" />
+                  Send Message
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ADD: Submit Revision Dialog */}
+      <Dialog open={revisionDialogOpen} onOpenChange={setRevisionDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Submit Revision</DialogTitle>
+            <DialogDescription>
+              Upload a revision file for this order that will be sent to the freelancer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Important:</strong> This revision will be saved and sent to the freelancer.
+              </AlertDescription>
+            </Alert>
+            <div>
+              <Label htmlFor="revisionFile">Upload File *</Label>
+              <Input
+                id="revisionFile"
+                type="file"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    if (file.size > 40 * 1024 * 1024) {
+                      toast.error('File size must be less than 40MB');
+                      e.target.value = '';
+                      return;
+                    }
+                    setRevisionFile(file);
+                  }
+                }}
+                accept="*/*"
+                className="mt-2"
+              />
+              {revisionFile && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Selected: {revisionFile.name} ({(revisionFile.size / 1024 / 1024).toFixed(2)} MB)
+                </p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="revisionNotes">Notes (Optional)</Label>
+              <Textarea
+                id="revisionNotes"
+                placeholder="Add any notes about this revision for the freelancer..."
+                value={revisionNotes}
+                onChange={(e) => setRevisionNotes(e.target.value)}
+                rows={4}
+                className="mt-2"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRevisionDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitRevision} disabled={processing || !revisionFile}>
+              <FileUp className="w-4 h-4 mr-2" />
+              Submit Revision
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Internal Revision Dialog */}
+      <Dialog open={internalRevisionDialogOpen} onOpenChange={setInternalRevisionDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Request Internal QC Revision</DialogTitle>
+            <DialogDescription>
+              Create quality control revision for freelancer. <strong>This is hidden from the client.</strong>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Revision Instructions *</Label>
+              <Textarea
+                placeholder="Describe what needs to be fixed or improved..."
+                value={internalRevisionText}
+                onChange={(e) => setInternalRevisionText(e.target.value)}
+                rows={6}
+                className="resize-none"
+              />
+              <p className="text-xs text-muted-foreground">
+                Be specific about what needs to be changed. The freelancer will see this but the client will not.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setInternalRevisionDialogOpen(false);
+              setInternalRevisionText('');
+            }}>Cancel</Button>
+            <Button onClick={handleCreateInternalRevision} disabled={processing || !internalRevisionText.trim()}>
+              {processing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Create QC Revision
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Internal Revision Management Dialog */}
+      <Dialog open={internalRevisionManagementOpen} onOpenChange={setInternalRevisionManagementOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {revisionAction === 'complete' ? 'Complete Internal Revision' : 'Return to Freelancer'}
+            </DialogTitle>
+            <DialogDescription>
+              {revisionAction === 'complete' 
+                ? 'Mark this internal revision as complete and ready for delivery.'
+                : 'Return this revision to the freelancer with additional feedback.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {selectedRevisionId && (
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  Revision ID: {selectedRevisionId}
+                </p>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>{revisionAction === 'complete' ? 'Completion Notes (Optional)' : 'Additional Changes Required *'}</Label>
+              <Textarea
+                placeholder={revisionAction === 'complete' 
+                  ? 'Add any notes about completing this revision...'
+                  : 'Describe what additional changes are needed...'}
+                value={revisionManagementNotes}
+                onChange={(e) => setRevisionManagementNotes(e.target.value)}
+                rows={6}
+                className="resize-none"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setInternalRevisionManagementOpen(false);
+              setSelectedRevisionId(null);
+              setRevisionManagementNotes('');
+            }}>Cancel</Button>
+            {revisionAction === 'complete' && selectedRevisionId && (
+              <Button onClick={() => handleCompleteInternalRevision(selectedRevisionId)} disabled={processing} className="bg-green-600 hover:bg-green-700">
+                {processing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Complete Revision
+              </Button>
+            )}
+            {revisionAction === 'return' && selectedRevisionId && (
+              <Button onClick={() => handleReturnInternalRevision(selectedRevisionId)} disabled={processing || !revisionManagementNotes.trim()} className="bg-orange-600 hover:bg-orange-700">
+                {processing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Return to Freelancer
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Fine Dialog */}
+      <Dialog open={fineDialogOpen} onOpenChange={setFineDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Issue Fine</DialogTitle>
+            <DialogDescription>
+              Apply a fine to the freelancer or client for this order.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Fine Type *</Label>
+              <Select value={fineType} onValueChange={(v: any) => setFineType(v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="client_complaint">Client Complaint</SelectItem>
+                  <SelectItem value="late_delivery">Late Delivery</SelectItem>
+                  <SelectItem value="quality_issue">Quality Issue</SelectItem>
+                  <SelectItem value="policy_violation">Policy Violation</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Amount (KSh) *</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={fineAmount}
+                onChange={(e) => setFineAmount(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Reason *</Label>
+              <Textarea
+                placeholder="Explain why this fine is being applied..."
+                value={fineReason}
+                onChange={(e) => setFineReason(e.target.value)}
+                rows={4}
+                className="resize-none"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setFineDialogOpen(false);
+              setFineAmount('');
+              setFineReason('');
+              setFineType('other');
+            }}>Cancel</Button>
+            <Button onClick={handleIssueFine} disabled={processing || !fineAmount || !fineReason.trim()} className="bg-red-600 hover:bg-red-700">
+              {processing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Apply Fine
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bonus Dialog */}
+      <Dialog open={bonusDialogOpen} onOpenChange={setBonusDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Issue Bonus</DialogTitle>
+            <DialogDescription>
+              Apply a bonus payment for exceptional work on this order.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Amount (KSh) *</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={bonusAmount}
+                onChange={(e) => setBonusAmount(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Reason *</Label>
+              <Textarea
+                placeholder="Explain why this bonus is being awarded..."
+                value={bonusReason}
+                onChange={(e) => setBonusReason(e.target.value)}
+                rows={4}
+                className="resize-none"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setBonusDialogOpen(false);
+              setBonusAmount('');
+              setBonusReason('');
+            }}>Cancel</Button>
+            <Button onClick={handleIssueBonus} disabled={processing || !bonusAmount || !bonusReason.trim()} className="bg-green-600 hover:bg-green-700">
+              {processing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Apply Bonus
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Editor Assignment Dialog */}
+      <Dialog open={editorDialogOpen} onOpenChange={setEditorDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileCheck className="w-5 h-5 text-primary" />
+              Assign Editor for QC Review
+            </DialogTitle>
+            <DialogDescription>
+              Select an editor to review this order before delivery to the client.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Current Editor Assignments */}
+            {editorAssignments.length > 0 && (
+              <div className="p-3 border rounded-lg bg-muted/30">
+                <h4 className="text-sm font-medium mb-2">Currently Assigned Editors:</h4>
+                <div className="space-y-2">
+                  {editorAssignments.map((assignment: any) => (
+                    <div key={assignment.id} className="flex items-center justify-between p-2 bg-background rounded border">
+                      <div>
+                        <span className="font-medium">{assignment.editorName}</span>
+                        <Badge 
+                          variant={
+                            assignment.approvalStatus === 'approved' ? 'default' :
+                            assignment.approvalStatus === 'rejected' ? 'destructive' :
+                            'secondary'
+                          }
+                          className="ml-2"
+                        >
+                          {assignment.approvalStatus}
+                        </Badge>
+                      </div>
+                      {assignment.approvalStatus === 'pending' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveEditor(assignment.editorId)}
+                          disabled={processing}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Select New Editor */}
+            <div className="space-y-2">
+              <Label htmlFor="editor">Select Editor</Label>
+              <Select value={selectedEditor} onValueChange={setSelectedEditor}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose an editor" />
+                </SelectTrigger>
+                <SelectContent className="z-[70]">
+                  {editors.length === 0 ? (
+                    <SelectItem value="none" disabled>No editors available</SelectItem>
+                  ) : (
+                    editors
+                      .filter((e) => !editorAssignments.some((a: any) => a.editorId === e.id))
+                      .map((editor) => (
+                        <SelectItem key={editor.id} value={editor.id.toString()}>
+                          <div className="flex items-center gap-2">
+                            <span>{editor.name}</span>
+                            {editor.rating && (
+                              <Badge variant="outline" className="text-xs">
+                                ★ {editor.rating.toFixed(1)}
+                              </Badge>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                The editor will receive a notification and can approve, reject, or request revisions for this order.
+              </AlertDescription>
+            </Alert>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setEditorDialogOpen(false);
+              setSelectedEditor('');
+            }}>Cancel</Button>
+            <Button 
+              onClick={handleAssignEditor} 
+              disabled={!selectedEditor || processing}
+              className="bg-primary hover:bg-primary/90"
+            >
+              {processing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Assign Editor
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

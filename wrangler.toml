@@ -1,0 +1,19 @@
+# Cloudflare Pages Configuration for TaskLynk
+# Deploy with: npx @cloudflare/next-on-pages && npx wrangler pages deploy .vercel/output/static
+
+name = "new-tasklynk"
+compatibility_date = "2026-11-18"
+pages_build_output_dir = ".vercel/output/static"
+
+# Environment variables for Cloudflare Pages
+# Set these in Cloudflare Dashboard → Pages → Settings → Environment Variables
+# or via: npx wrangler pages secret put <KEY>
+
+[vars]
+NODE_ENV = "production"
+NEXT_PUBLIC_APP_URL = "https://tasklynk.co.ke"
+NEXT_PUBLIC_API_URL = "https://tasklynk.co.ke/api"
+
+# NOTE: Sensitive environment variables (API keys, secrets, DB URLs)
+# should be set via Cloudflare Dashboard or wrangler secret put, NOT here.
+# This file only contains non-sensitive configuration.

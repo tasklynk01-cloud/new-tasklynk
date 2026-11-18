@@ -1,0 +1,54 @@
+@ -0,0 +1,53 @@
+-- Migration: Add CPP pricing fields and adjustment tracking
+-- Date: 2025-11-25
+-- Description: Enables client-set CPP, manager additional requests, client bonuses/topups
+
+-- 1) Add CPP pricing columns to jobs table
+ALTER TABLE jobs ADD COLUMN client_cpp REAL DEFAULT NULL;
+ALTER TABLE jobs ADD COLUMN client_is_cpp_confirmed INTEGER DEFAULT 0; -- boolean (0/1)
+ALTER TABLE jobs ADD COLUMN pages_count INTEGER DEFAULT 1;
+ALTER TABLE jobs ADD COLUMN is_single_spaced INTEGER DEFAULT 0; -- boolean
+ALTER TABLE jobs ADD COLUMN manager_additional REAL DEFAULT 0;
+ALTER TABLE jobs ADD COLUMN manager_additional_note TEXT DEFAULT NULL;
+ALTER TABLE jobs ADD COLUMN client_bonus REAL DEFAULT 0;
+ALTER TABLE jobs ADD COLUMN status_total_amount REAL DEFAULT 0;
+ALTER TABLE jobs ADD COLUMN payment_status TEXT DEFAULT 'unpaid'; -- unpaid, pending, paid, refunded
+ALTER TABLE jobs ADD COLUMN last_amount_update_at TEXT DEFAULT CURRENT_TIMESTAMP;
+
+-- 2) Table to track topup/adjustment history (audit trail)
+CREATE TABLE IF NOT EXISTS order_amount_adjustments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  changed_by INTEGER REFERENCES users(id),
+  change_type TEXT NOT NULL, -- 'manager_request', 'client_topup', 'admin_override'
+  amount REAL NOT NULL,
+  reason TEXT,
+  status TEXT DEFAULT 'pending', -- 'pending', 'approved', 'rejected', 'applied'
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  applied_at TEXT
+);
+
+-- 3) Table to store minimum CPP thresholds centrally
+CREATE TABLE IF NOT EXISTS pricing_minimums (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  service_type TEXT NOT NULL UNIQUE, -- 'writing_page', 'slide', 'technical_page', etc.
+  min_cpp REAL NOT NULL,
+  effective_from TEXT DEFAULT CURRENT_TIMESTAMP,
+  effective_to TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 4) Insert default minimums (adjust to platform policy)
+INSERT INTO pricing_minimums (service_type, min_cpp)
+VALUES
+  ('writing_page', 240.00),
+  ('slide', 150.00),
+  ('writer_default', 200.00),
+  ('technical_page', 270.00)
+ON CONFLICT(service_type) DO NOTHING;
+
+-- 5) Add indexes for performance
+CREATE INDEX IF NOT EXISTS idx_order_adjustments_order_id ON order_amount_adjustments(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_adjustments_status ON order_amount_adjustments(status);
+CREATE INDEX IF NOT EXISTS idx_pricing_minimums_service_type ON pricing_minimums(service_type);
+CREATE INDEX IF NOT EXISTS idx_jobs_payment_status ON jobs(payment_status);

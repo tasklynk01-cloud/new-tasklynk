@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="50%" stop-color="#161b2c"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff8c42"/>
+      <stop offset="100%" stop-color="#ff5e3a"/>
+    </linearGradient>
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#242b3d"/>
+      <stop offset="100%" stop-color="#1b2130"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="800" height="450" fill="url(#bgGrad)"/>
+  
+  <!-- Decorative Grid & Circles -->
+  <circle cx="700" cy="80" r="160" fill="#ff8c42" opacity="0.08" filter="blur(40px)"/>
+  <circle cx="100" cy="380" r="140" fill="#3b82f6" opacity="0.06" filter="blur(40px)"/>
+  
+  <!-- Content Container Card -->
+  <rect x="80" y="60" width="640" height="330" rx="16" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5"/>
+  
+  <!-- Icon Badge -->
+  <rect x="120" y="100" width="56" height="56" rx="12" fill="url(#accentGrad)"/>
+  <path d="M136 128 L144 136 L160 120" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  
+  <!-- Text Lines Mockup -->
+  <text x="195" y="125" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="700">Academic Writing &amp; Research Excellence</text>
+  <text x="195" y="148" fill="#94a3b8" font-family="system-ui, -apple-system, sans-serif" font-size="14">TaskLynk Verified Academic Editorial Guide</text>
+  
+  <!-- Document Structure Mockup -->
+  <rect x="120" y="180" width="560" height="1" fill="#334155"/>
+  
+  <rect x="120" y="205" width="260" height="14" rx="4" fill="#38bdf8" opacity="0.8"/>
+  <rect x="120" y="230" width="480" height="10" rx="3" fill="#64748b" opacity="0.6"/>
+  <rect x="120" y="250" width="420" height="10" rx="3" fill="#64748b" opacity="0.6"/>
+  <rect x="120" y="270" width="500" height="10" rx="3" fill="#64748b" opacity="0.6"/>
+  
+  <!-- Bottom Pills -->
+  <rect x="120" y="315" width="130" height="28" rx="14" fill="#ff8c42" opacity="0.15" stroke="#ff8c42" stroke-width="1"/>
+  <text x="185" y="334" fill="#ff8c42" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" text-anchor="middle">100% Original</text>
+  
+  <rect x="260" y="315" width="140" height="28" rx="14" fill="#38bdf8" opacity="0.15" stroke="#38bdf8" stroke-width="1"/>
+  <text x="330" y="334" fill="#38bdf8" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" text-anchor="middle">Turnitin Verified</text>
+  
+  <rect x="410" y="315" width="150" height="28" rx="14" fill="#10b981" opacity="0.15" stroke="#10b981" stroke-width="1"/>
+  <text x="485" y="334" fill="#10b981" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" text-anchor="middle">Expert Reviewed</text>
+</svg>
